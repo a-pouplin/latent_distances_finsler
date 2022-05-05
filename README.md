@@ -1,1 +1,1 @@
-# latent_distances_finsler
+# Identifying latent distances with Finslerian geometry
