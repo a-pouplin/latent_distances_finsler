@@ -7,10 +7,7 @@ pip install -e .
 setup_requires = ["pytest-runner"]
 tests_require = ["pytest"]
 
-install_requires = [
-    "numpy>=1.20.0",
-    "torch>=1.9.0",
-    "scikit-learn>=1.0.2"]
+install_requires = ["numpy>=1.20.0", "torch>=1.9.0", "scikit-learn>=1.0.2"]
 
 
 setup(
