@@ -3,6 +3,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import torch
 from matplotlib.patches import Ellipse, PathPatch
 from matplotlib.path import Path
@@ -456,3 +457,11 @@ def nearPD(A, nit=10):
         deltaS = Xk - Rk
         Yk = _getPu(Xk, W=W)
     return Yk
+
+
+def psd_matrix(eigval):
+    """Create a psd matrix based on its eigenvalues"""
+    dim = len(eigval)
+    D = np.diag(eigval)
+    P, _ = scipy.linalg.qr(np.random.rand(dim, dim))
+    return P.T @ D @ P
