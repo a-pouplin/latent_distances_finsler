@@ -62,42 +62,6 @@ def ellipse_draw(matrix, center, scale, **kwargs):
     return Ellipse(center, width=scale * width, height=scale * height, angle=angle, fill=False, **kwargs)
 
 
-def contours_comparison(finsler, fundamental, out_dir):
-    """will be depreciated because restructuration of func: indiactrix (main.py)"""
-    fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-    axs.contour(
-        finsler,
-        (
-            0.5,
-            1,
-            2,
-            3,
-        ),
-        colors="orange",
-        linewidths=1.0,
-        linestyles="dashed",
-    )
-    axs.contour(
-        fundamental,
-        (
-            0.5,
-            1,
-            2,
-            3,
-        ),
-        colors="blue",
-        linewidths=1.0,
-        linestyles="dotted",
-    )
-    axs.set_xticks([])
-    axs.set_yticks([])
-    proxy1 = plt.Rectangle((0, 0), 1, 1, fc="orange", ec="white", alpha=0.7, linewidth=4)
-    proxy2 = plt.Rectangle((0, 0), 1, 1, fc="blue", ec="white", alpha=0.7, linewidth=4)
-    axs.legend(handles=[proxy1, proxy2], labels=["finsler", "fundamental form"])
-    plt.tight_layout()
-    fig.savefig(os.path.join(out_dir, "{}.png".format("fundamental_finsler_contours")), dpi=fig.dpi)
-
-
 def contour_fundamental(finsler, riemann, fundamental0, fundamental1, vectors, out_dir, with_eig="True"):
     scale = len(vectors) / (np.max(vectors) - np.min(vectors))
     center = (int(len(vectors) / 2), int(len(vectors) / 2))
@@ -124,24 +88,24 @@ def contour_fundamental(finsler, riemann, fundamental0, fundamental1, vectors, o
     fig.savefig(os.path.join(out_dir, "{}.png".format("fundamentals")), dpi=fig.dpi)
 
 
-def contour_riemann(finsler, riemann, vectors, out_dir, title, name):
+def contour_riemann(finsler, riemann, vectors, out_dir, name, title=None):
     # scale = len(vectors) / (np.max(vectors) - np.min(vectors))
     # center = (int(len(vectors) / 2), int(len(vectors) / 2))
     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-    axs.contour(finsler, (1,), colors="tab:orange", linewidths=1, linestyles="dashed")
-    axs.contour(riemann, (1,), colors="tab:blue", linewidths=1, linestyles="dashed")
+    axs.contour(finsler, (1,), colors="tab:orange", linewidths=1)
+    axs.contour(riemann, (1,), colors="tab:blue", linewidths=1)
     # axs.add_patch(ellipse_draw(riemann, center, scale, linewidth=1, edgecolor='tab:blue', linestyle='dashed'))
     proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
     proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
-    axs.legend(handles=[proxy1, proxy2], labels=["finsler", "riemann"])
+    axs.legend(handles=[proxy1, proxy2], labels=["Finsler", "Riemann"])
     axs.set_xticks([])
     axs.set_yticks([])
     axs.set_aspect("equal")
-    # axs.set_title(title)
+    axs.set_title(title)
     fig.savefig(os.path.join(out_dir, "{}.png".format(name)), dpi=fig.dpi)
 
 
-def contour_test(finsler, riemann_test, riemann, scale, out_dir):
+def contour_test_depreciated(finsler, riemann_test, riemann, scale, out_dir):
     normalise = len(scale) / (np.max(scale) - np.min(scale))
     center = (int(len(scale) / 2), int(len(scale) / 2))
     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
@@ -239,3 +203,83 @@ def rotation_ellipse(image, angle, out_dir):
     axs.set_xticks([])
     axs.set_yticks([])
     fig.savefig(os.path.join(out_dir, "{}.png".format("test_ellipse")), dpi=fig.dpi)
+
+
+def automated_scaling2(metric):
+    """scale the vector to compute the indicatrix"""
+    eigvalues, eigvectors = np.linalg.eig(metric)
+    long_size, short_size = 1 / np.sqrt(np.min(eigvalues)), 1 / np.sqrt(np.max(eigvalues))
+    (cos_theta, sin_theta) = eigvectors[:, 0]
+    theta = -np.rad2deg(np.arctan(sin_theta / cos_theta))
+    if (theta % 180) < 45 or (theta % 180) > 135:
+        return long_size, short_size
+    elif 45 < (theta % 180) < 135 or (theta % 180) > 135:
+        return short_size, long_size
+    else:
+        print("error with angle")
+
+
+def PolyArea(vertices):
+    x, y = vertices[:, 0], vertices[:, 1]
+    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+
+def contour_high_dim(finsler, riemann, out_dir, name, title=None):
+    fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+    axs.contour(finsler, (1,), colors="tab:orange", linewidths=2)
+    axs.contour(
+        riemann,
+        (1,),
+        colors="tab:blue",
+        linewidths=2,
+    )
+    # axs.contour(custom, (1,), colors="tab:green", linewidths=2, linestyles='dashed')
+    proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
+    proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
+    # proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
+    axs.legend(handles=[proxy1, proxy2], labels=["Finsler", "Riemann"])
+    axs.set_xticks([])
+    axs.set_yticks([])
+    axs.set_aspect("equal")
+    axs.set_title(title)
+    axs.set(frame_on=False)
+    fig.savefig(os.path.join(out_dir, "{}.png".format(name)), dpi=fig.dpi, bbox_inches="tight")
+
+
+def contour_bounds(finsler, riemann, lower, out_dir, name, title=None, legend=False):
+    fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+    axs.contour(finsler, (1,), colors="tab:orange", linewidths=2)
+    axs.contour(riemann, (1,), colors="tab:blue", linewidths=2)
+    axs.contour(lower, (1,), colors="tab:green", linewidths=2)
+    if legend:
+        proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
+        proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
+        proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
+        axs.legend(handles=[proxy1, proxy2, proxy3], labels=["Finsler", "Riemann", "Lower bound"])
+    axs.set_xticks([])
+    axs.set_yticks([])
+    axs.set_aspect("equal")
+    axs.set_title(title)
+    axs.set(frame_on=False)
+    fig.savefig(os.path.join(out_dir, "{}.png".format(name)), dpi=fig.dpi, bbox_inches="tight")
+
+
+def contour_test(finsler_sim, riemann_sim, finsler_expl, riemann_expl, out_dir, name, title=None):
+    fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+    axs.contour(finsler_sim, (1,), colors="tab:orange", linewidths=2)
+    axs.contour(riemann_sim, (1,), colors="tab:blue", linewidths=2)
+    axs.contour(finsler_expl, (1,), colors="tab:red", linewidths=2, linestyles="dashed")
+    axs.contour(riemann_expl, (1,), colors="tab:green", linewidths=2, linestyles="dashed")
+    proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
+    proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
+    proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:red", ec="white", alpha=0.7, linewidth=4)
+    proxy4 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
+    axs.legend(
+        handles=[proxy1, proxy2, proxy3, proxy4], labels=["Finsler sim", "Riemann sim", "Finsler expl", "Riemann expl"]
+    )
+    axs.set_xticks([])
+    axs.set_yticks([])
+    axs.set_aspect("equal")
+    axs.set_title(title)
+    axs.set(frame_on=False)
+    fig.savefig(os.path.join(out_dir, "{}.png".format(name)), dpi=fig.dpi, bbox_inches="tight")

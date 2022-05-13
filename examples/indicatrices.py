@@ -3,31 +3,27 @@ import argparse
 import matplotlib.pyplot as plt
 import numdifftools as nd
 import numpy as np
-import scipy.special
 from matplotlib.path import Path
+from scipy.special import gamma, hyp1f1
 
 from finsler.utils.helper import psd_matrix
-from finsler.visualisation.indicatrices import contour_riemann
+from finsler.visualisation.indicatrices import PolyArea, contour_bounds
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--outDir", default="plots/indicatrices/", type=str)
+    parser.add_argument("--seed", default=7, type=int)
     opts = parser.parse_args()
     return opts
-
-
-def PolyArea(vertices):
-    x, y = vertices[:, 0], vertices[:, 1]
-    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 
 class NonCentralNakagami:
     """Non central Nakagami distribution computed for data points Jx.
     inputs:
-        - mean: the mean of Jaccobian (matrix of size: DxD)
-        - cov: the covariance of Jaccobian (matrix of size: DxD)
-        - x: latent vectors (matrix of size: 1xD)
+        - mean: E[J].T @ E[J] (matrix of size: qxq)
+        - cov: the covariance of Jacobian (matrix of size: qxq)
+        - x: latent vectors (matrix of size: 1xq)
     source:
         S. Hauberg, 2018, "The non-central Nakagami distribution"
     """
@@ -40,9 +36,9 @@ class NonCentralNakagami:
     def expectation(self, x):
         # eq 2.9. expectation = E[|Jx|], when J ~ N(mean, cov)
         var, mu = x.T @ self.cov @ x, x.T @ self.mean @ x
-        omega, D = mu / (var + 1e-10), self.D
-        term_gamma = scipy.special.gamma((D + 1) / 2) / scipy.special.gamma(D / 2)
-        term_hyp1f1 = scipy.special.hyp1f1((-1 / 2), (D / 2), -1 / 2 * omega)
+        omega = mu / (var + 1e-10)
+        term_gamma = gamma((self.D + 1) / 2) / gamma(self.D / 2)
+        term_hyp1f1 = hyp1f1((-1 / 2), (self.D / 2), -1 / 2 * omega)
         expectation = np.sqrt(var) * np.sqrt(2) * term_gamma * term_hyp1f1
         return expectation
 
@@ -104,71 +100,102 @@ class Tensor:
             - cov: qxq covariance matrix, with cov = var[J]
             - mean: qxq matrix, with mean = E[J].T@E[J]
             - v: vector that will define the fundamnetal form
-    output: DxD positive definite matrix.
+    output: qxq positive definite matrix.
     """
 
     def riemann(self, cov, mean, D):
         # expectation of M, with M ~ W_q(D, cov, inv(cov) @ mean)
         return D * cov + mean
 
-    def fundamental(self, v):
+    def fundamental(self, v, ov, mean, D):
         nakagami = NonCentralNakagami(cov=cov, mean=mean, D=D)
         FF = nd.Hessian(lambda x: nakagami.expectation(x) ** 2)
         return 1 / 2 * FF(v)
 
+    def lower(self, cov, D):
+        gamma_ratio = gamma((D + 1) / 2) / gamma(D / 2)
+        alpha = 2 * (gamma_ratio**2)
+        return alpha * cov
 
-def indicatrix(cov, mean, D, vectors):
-    """Draw the indicatrix of functions using a range of vectors.
-    Let's have f: R^q -> R^D, a stochastic mapping,
-    with J = Jacobian(f).
+
+def compute_riemann_indicatrix(metric, vectors, size):
+    """Draw the indicatrix for a psd metric tensor.
     ---
-    inputs: - cov: qxq covariance matrix, with cov = var[J]
-            - mean: qxq matrix, with mean = E[J].T@E[J]
-            - D: dimension of the observational space:
+    inputs: - metric: qxq metric tensor, should be PSD
             - vectors: range of vectors that helps compute the functions
+            - size: size of the image to draw the contour plot
     """
-    size = len(vectors)
-    finsler = np.empty((size, size))
-    nakagami = NonCentralNakagami(cov=cov, mean=mean, D=D)
+    indicatrix = np.empty((size, size))
     for i1, y1 in enumerate(vectors):
         for i2, y2 in enumerate(vectors):
             y = np.array([y1, y2])  # random vectors
-            finsler[i1, i2] = nakagami.expectation(y)
-    return finsler
+            indicatrix[i1, i2] = y @ metric @ y.T
+    return indicatrix
 
 
-def indicatrix_riemann(cov, mean, D, vectors):
-    """Draw the indicatrix of functions using a range of vectors.
-    Let's have f: R^q -> R^D, a stochastic mapping, with J = Jacobian(f).
-    ---
-    inputs: - cov: qxq covariance matrix, with cov = var[J]
-            - mean: qxq matrix, with mean = E[J].T@E[J]
-            - D: dimension of the observational space:
-            - vectors: range of vectors that helps compute the functions
-    """
-    size = len(vectors)
-    riemann = np.empty((size, size))
-    tensor = Tensor()
-    metric = tensor.riemann(cov, mean, D)
-    for i1, y1 in enumerate(vectors):
-        for i2, y2 in enumerate(vectors):
-            y = np.array([y1, y2])  # random vectors
-            riemann[i1, i2] = y @ metric @ y.T
-    return riemann
+class Indicatrices:
+    def __init__(self, D, vectors):
+        """Draw the indicatrix of functions using a range of vectors.
+        Let's have f: R^q -> R^D, a stochastic mapping,
+        with J = Jacobian(f).
+        ---
+        inputs: - cov: qxq covariance matrix, with cov = var[J]
+                - mean: qxq matrix, with mean = E[J].T@E[J]
+                - D: dimension of the observational space:
+                - vectors: range of vectors that helps compute the functions
+        """
+        self.vectors = vectors
+        self.size = len(vectors)
+        self.D = D
 
+    def explicit_finsler(self, cov, mean):
+        finsler = np.empty((self.size, self.size))
+        nakagami = NonCentralNakagami(cov, mean, self.D)
+        for i1, y1 in enumerate(self.vectors):
+            for i2, y2 in enumerate(self.vectors):
+                y = np.array([y1, y2])  # random vectors
+                finsler[i1, i2] = nakagami.expectation(y)
+        return finsler
 
-def automated_scaling2(metric):
-    """scale the vector to compute the indicatrix"""
-    eigvalues, eigvectors = np.linalg.eig(metric)
-    long_size, short_size = 1 / np.sqrt(np.min(eigvalues)), 1 / np.sqrt(np.max(eigvalues))
-    (cos_theta, sin_theta) = eigvectors[:, 0]
-    theta = -np.rad2deg(np.arctan(sin_theta / cos_theta))
-    if (theta % 180) < 45 or (theta % 180) > 135:
-        return long_size, short_size
-    elif 45 < (theta % 180) < 135 or (theta % 180) > 135:
-        return short_size, long_size
-    else:
-        print("error with angle")
+    def explicit_riemann(self, cov, mean):
+        tensor = Tensor()
+        metric = tensor.riemann(cov, mean, self.D)
+        return self.custom_riemann(metric)
+
+    def explicit_lower(self, cov):
+        tensor = Tensor()
+        metric = tensor.lower(cov, self.D)
+        return self.custom_riemann(metric)
+
+    def simulated_riemann(self, random_metric):
+        metric = np.mean(random_metric, axis=2)
+        indicatrix = np.empty((self.size, self.size))
+        for i1, y1 in enumerate(self.vectors):
+            for i2, y2 in enumerate(self.vectors):
+                y = np.array([y1, y2])  # random vectors
+                indicatrix[i1, i2] = y @ metric @ y.T
+        return indicatrix
+
+    def simulated_finsler(self, random_metric):
+        indicatrix = np.empty((self.size, self.size))
+        num_sim = random_metric.shape[-1]
+        for i1, y1 in enumerate(self.vectors):
+            for i2, y2 in enumerate(self.vectors):
+                y_ = np.array([y1, y2])  # random vectors
+                y = np.repeat(y_[:, np.newaxis], num_sim, axis=1)
+                My = np.einsum("ijk,jl->ik", random_metric, y)
+                yMy = np.einsum("jk,jn->kn", y, My)[0, :] / num_sim
+                np.allclose(yMy[0], y_ @ random_metric[:, :, 0] @ y_.T, rtol=1e-6)
+                indicatrix[i1, i2] = np.mean(np.sqrt(yMy))
+        return indicatrix
+
+    def custom_riemann(self, metric):
+        indicatrix = np.empty((self.size, self.size))
+        for i1, y1 in enumerate(self.vectors):
+            for i2, y2 in enumerate(self.vectors):
+                y = np.array([y1, y2])  # random vectors
+                indicatrix[i1, i2] = y @ metric @ y.T
+        return indicatrix
 
 
 def automated_scaling(metric):
@@ -179,69 +206,31 @@ def automated_scaling(metric):
 
 if __name__ == "__main__":
 
-    upper_bounds = np.empty((100,))
-    for seed_id in range(10):
-        np.random.seed(seed_id)  # 12 #31
-        opts = get_args()
+    opts = get_args()
 
-        # inputs that define the random metric M ~ W_q(D, cov, inv(cov) @ mean)
-        D = 3
-        # mu = np.array([[-0.2747,  0.8382, -0.8249],
-        #                [-0.9508, -0.6330,  0.0297]])
-        # cov = np.array([[ 2.0370e-05,  1.2125e-05],
-        #                 [ 6.0965e-05,  3.2783e-07]])
-        #
-        # cov = nearPD(cov)
-        # # print(np.all(np.linalg.eigvals(cov) > 0))
-        # mean = mu@np.transpose(mu)
-        # mean = np.array([[1.4402521, 0.13207239],[0.13207239, 0.22419274]])
-        # cov = np.array([[0.0010255, 0.00054871], [0.00054871, 0.00087961]])
+    for opts.seed in range(10):
+        np.random.seed(opts.seed)  # 12 #31
         mean = psd_matrix(1e-6 + np.random.rand(2))
-        cov = psd_matrix(1e-6 + np.random.rand(2))  # WARNING: should be q, not D !
-
-        # compute finsler indicatrix
-        # vectors = np.linspace(-5, 5, 32)
+        # mean = np.empty((2,2))
+        cov = psd_matrix(1e-6 + np.random.rand(2))
 
         tensor = Tensor()
-        riemann = tensor.riemann(cov, mean, D)
-        alpha = automated_scaling(riemann)
-        # vectors_x = np.linspace(-1.1*alpha_x, 1.1*alpha_x, 32)
-        # vectors_y = np.linspace(-1.1*alpha_y, 1.1*alpha_y, 32)
-        # vectors = (vectors_x, vectors_y)
-        vectors = np.linspace(-1.1 * alpha, 1.1 * alpha, 32)
-        finsler_indicatrix = indicatrix(cov, mean, D, vectors)
-        # fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-        # axs.contour(finsler_indicatrix, (1,), colors='orange', linewidths=2, alpha=0.7)
-        # axs.imshow(finsler_indicatrix)
-        # plt.show()
-        # raise
-        riemann_indicatrix = indicatrix_riemann(cov, mean, D, vectors)
-        # contour_test(finsler_indicatrix, riemann_indicatrix, riemann, vectors, opts.outDir)
-        # raise
+        # riemann = tensor.riemann(cov, mean, 3)
+        lower = tensor.lower(cov, 3)
+        alpha = automated_scaling(lower)
 
-        volume = Volume()
-        # finsler_vol = volume.finsler(finsler_indicatrix, vectors)
-        finsler_vol2 = volume.finsler2(finsler_indicatrix, vectors)
-        riemann_vol = volume.riemann(cov, mean, D)
-        riemann_vol2 = volume.finsler2(riemann_indicatrix, vectors)
+        vectors = np.linspace(-1 * alpha, 1 * alpha, 64)
+        indicatrix = Indicatrices(3, vectors)
+        finsler_indicatrix = indicatrix.explicit_finsler(cov, mean)
+        riemann_indicatrix = indicatrix.explicit_riemann(cov, mean)
+        lower_indicatrix = indicatrix.explicit_lower(cov)
 
-        contour_riemann(
+        print("indicatrix_comparison_{}".format(opts.seed))
+        contour_bounds(
             finsler_indicatrix,
             riemann_indicatrix,
-            vectors,
+            lower_indicatrix,
             opts.outDir,
-            title="mean: {}, cov: {}".format(mean, cov),
-            name="riemann_{}".format(seed_id),
+            # title="mean: {}, cov: {}".format(mean, cov),
+            name="indicatrix_comparison_{}".format(opts.seed),
         )
-
-        print("finsler:", finsler_vol2)
-        print("riemann:", riemann_vol2)
-        # upper_bound_vol = volume.upper_bound(cov, mean, D)
-        # ratio_vol = (rieman_vol-finsler_vol)/rieman_vol
-        # assert (upper_bound_vol-ratio_vol)>0, 'Issue with {}'.format(seed_id)
-        # print('{}: True'.format(seed_id))
-        # # print('seed:{}, ratio:{:.2f}, upper bound -
-        # ratio :{:.2f}'.format(seed_id, ratio_vol, upper_bound_vol-ratio_vol))
-        # upper_bounds[seed_id] = upper_bound_vol
-    # plt.hist(ratio_vol, 20, density=True, alpha=0.75)
-    # plt.show()

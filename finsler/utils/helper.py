@@ -465,3 +465,8 @@ def psd_matrix(eigval):
     D = np.diag(eigval)
     P, _ = scipy.linalg.qr(np.random.rand(dim, dim))
     return P.T @ D @ P
+
+
+def is_pos_def(x):
+    "check if matrix is psd"
+    return np.all(np.linalg.eigvals(x) > 0)
