@@ -12,7 +12,7 @@ from finsler.visualisation.indicatrices import PolyArea, contour_bounds
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outDir", default="plots/indicatrices/", type=str)
+    parser.add_argument("--outDir", default="latent_distances_finsler/plots/indicatrices/", type=str)
     parser.add_argument("--seed", default=7, type=int)
     opts = parser.parse_args()
     return opts
@@ -208,7 +208,7 @@ if __name__ == "__main__":
 
     opts = get_args()
 
-    for opts.seed in range(10):
+    for opts.seed in range(21):
         np.random.seed(opts.seed)  # 12 #31
         mean = psd_matrix(1e-6 + np.random.rand(2))
         # mean = np.empty((2,2))
@@ -233,4 +233,5 @@ if __name__ == "__main__":
             opts.outDir,
             # title="mean: {}, cov: {}".format(mean, cov),
             name="indicatrix_comparison_{}".format(opts.seed),
+            legend=True,
         )

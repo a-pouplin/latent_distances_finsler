@@ -224,20 +224,31 @@ def PolyArea(vertices):
     return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 
-def contour_high_dim(finsler, riemann, out_dir, name, title=None):
+def contour_high_dim(finslers, riemanns, dims, out_dir, name, title=None, legend=True):
     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-    axs.contour(finsler, (1,), colors="tab:orange", linewidths=2)
-    axs.contour(
-        riemann,
-        (1,),
-        colors="tab:blue",
-        linewidths=2,
-    )
-    # axs.contour(custom, (1,), colors="tab:green", linewidths=2, linestyles='dashed')
-    proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
-    proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
-    # proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
-    axs.legend(handles=[proxy1, proxy2], labels=["Finsler", "Riemann"])
+    norm = plt.Normalize()
+    colorf = plt.cm.autumn(norm(range(len(dims)))[::-1])
+    csf = []
+    for idx, dim in enumerate(dims):
+        csf.append(axs.contour(finslers[idx], (1,), colors=colorf[idx].reshape(-1, 4), linewidths=1, alpha=0.5))
+    csr = axs.contour(riemanns[idx], (1,), colors="k", linewidths=1, linestyles=[(0, (1, 5))])
+
+    if legend:
+        labels = ["Finsler, dim: {}".format(dim) for dim in dims]
+        artists = []
+        for i, label in enumerate(labels):
+            artists.append(csf[i].legend_elements()[0][0])
+        artists.append(csr.legend_elements()[0][0])
+        labels.append("Riemann, dim: {}".format(dims[-1]))
+        axs.legend(
+            handles=artists,
+            labels=labels,
+            prop={"size": 6},
+            loc="lower center",
+            ncol=len(labels),
+            bbox_to_anchor=(0.5, -0.05),
+        )
+
     axs.set_xticks([])
     axs.set_yticks([])
     axs.set_aspect("equal")
@@ -248,14 +259,30 @@ def contour_high_dim(finsler, riemann, out_dir, name, title=None):
 
 def contour_bounds(finsler, riemann, lower, out_dir, name, title=None, legend=False):
     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-    axs.contour(finsler, (1,), colors="tab:orange", linewidths=2)
-    axs.contour(riemann, (1,), colors="tab:blue", linewidths=2)
-    axs.contour(lower, (1,), colors="tab:green", linewidths=2)
+    cs = []
+    cs.append(axs.contour(finsler, (1,), colors="tab:orange", linewidths=1))
+    cs.append(axs.contour(riemann, (1,), colors="tab:blue", linewidths=1))
+    cs.append(axs.contour(lower, (1,), colors="tab:green", linewidths=1))
+
     if legend:
-        proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
-        proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
-        proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
-        axs.legend(handles=[proxy1, proxy2, proxy3], labels=["Finsler", "Riemann", "Lower bound"])
+        labels = ["Finsler", "Riemann", "Lower bound"]
+        artists = []
+        for i, label in enumerate(labels):
+            artists.append(cs[i].legend_elements()[0][0])
+        axs.legend(
+            handles=artists,
+            labels=labels,
+            prop={"size": 6},
+            loc="lower center",
+            ncol=len(labels),
+            bbox_to_anchor=(0.5, -0.05),
+        )
+
+    # if legend:
+    #     proxy1 = plt.Rectangle((0, 0), 1, 1, fc="tab:orange", ec="white", alpha=0.7, linewidth=4)
+    #     proxy2 = plt.Rectangle((0, 0), 1, 1, fc="tab:blue", ec="white", alpha=0.7, linewidth=4)
+    #     proxy3 = plt.Rectangle((0, 0), 1, 1, fc="tab:green", ec="white", alpha=0.7, linewidth=4)
+    #     axs.legend(handles=[proxy1, proxy2, proxy3], labels=["Finsler", "Riemann", "Lower bound"])
     axs.set_xticks([])
     axs.set_yticks([])
     axs.set_aspect("equal")
