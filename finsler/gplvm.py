@@ -1,7 +1,10 @@
 import numpy as np
 import torch
+from stochman.curves import CubicSpline
 from stochman.manifold import Manifold
 from torch.autograd import functional
+
+from finsler.distributions import NonCentralNakagami
 
 
 def print_is_positive_definite(matrix):
@@ -49,7 +52,7 @@ class gplvm(Manifold):
         ksx = var * torch.exp((-0.5 * radius / length**2))
         return ksx
 
-    def evaluateDiffKernel(self, xstar, X, kernel_type="rbf"):
+    def evaluateDiffKernel(self, xstar, X, kernel_type=None):
         """
         Compute the differentiation of the kernel.
 
@@ -90,7 +93,8 @@ class gplvm(Manifold):
         Ksx = self.evaluateKernel(xstar, X)
         Kxx = self.evaluateKernel(X, X) + torch.eye(n) * noise
         Kss = self.evaluateKernel(xstar, xstar)
-        Kinv = (Kxx).cholesky().cholesky_inverse()  # Kinv = Kxx.inverse()
+        Kinv = torch.cholesky_inverse(torch.linalg.cholesky(Kxx))
+        # Kinv = (Kxx).cholesky().cholesky_inverse()  # Kinv = Kxx.inverse()
 
         mu = Ksx.mm(Kinv).mm(Y)
         Sigma = Kss - Ksx.mm(Kinv).mm(Ksx.T)  # should be symm. positive definite
@@ -107,26 +111,21 @@ class gplvm(Manifold):
         n = X.shape[0]
         noise = self.model.base_model.noise_unconstrained.exp() ** 2
         X, Y = X.to(torch.float64), Y.to(torch.float64)
-        # HACK: Do we change the type of the tensors?
         xstar = xstar.to(torch.float64)  # Numerical precision needed
 
         Ksx = self.model.base_model.kernel.forward(xstar, X)  # (Nstar,N)
         Kxx = self.model.base_model.kernel.forward(X, X) + torch.eye(n).to(self.device) * noise  # (N,N)
         Kss = self.model.base_model.kernel.forward(xstar, xstar)  # (Nstar,Nstar)
-        Kinv = (Kxx).cholesky().cholesky_inverse()  # (N,N)
-
-        # Ksx = self.evaluateKernel(xstar,X)
-        # Kxx = self.evaluateKernel(X,X) + torch.eye(n)*noise
-        # Kss = self.evaluateKernel(xstar,xstar)
-        # Kinv = (Kxx).cholesky().cholesky_inverse()
+        Kinv = torch.cholesky_inverse(torch.linalg.cholesky(Kxx))  # (N,N)
 
         mu = Ksx.mm(Kinv).mm(Y)
         Sigma = Kss - Ksx.mm(Kinv).mm(Ksx.T) + jitter * torch.eye(xstar.shape[0])  # should be symm. positive definite
         return mu, Sigma
 
-    def embed(self, xstar):
-        mu, var = self.model.base_model(xstar.float(), full_cov=False)
-        return mu.t(), var[0, :].t()
+    def embed(self, xstar, full_cov=True):
+        loc, cov = self.model.base_model.forward(torch.squeeze(xstar).float(), full_cov=full_cov, noiseless=False)
+
+        return loc.T, cov[0]  # dims: D x Nstar, Nstar x Nstar
 
     def derivatives(self, coords, method="discretization"):
         """
@@ -140,97 +139,111 @@ class gplvm(Manifold):
             - var_derivatives: variance (vector, size: (N_test-1))
             - mu_derivatives: expectation (matrix, size: (N_test-1)*D)
         """
-        # QUESTION: coords should have dimensions: N_test x d? Yes!
-        # QUESTION: isn't the description of the output mixed up? I changed 'sigma' for 'var', to be clearer
+        X = self.model.X_loc
+        Y = self.model.base_model.__dict__["y"].clone().detach()
+        # noise = self.model.base_model.noise_unconstrained.exp() ** 2
+        noise = 1e-8
+        D, N = Y.shape
+        Ntest, q = coords.shape
+
+        mu_star = torch.zeros(Ntest - 1, q, D, dtype=torch.float64)
+        var_star = torch.zeros(Ntest - 1, q, q, dtype=torch.float64)
+
+        mu_derivatives = torch.zeros(Ntest - 1, D, dtype=torch.float64)
+        var_derivatives = torch.zeros(Ntest - 1, dtype=torch.float64)
+
         if method == "discretization":
-            mean_c, var_c = self.embed_old2(coords)
-            mu_derivatives = mean_c[0:-1, :] - mean_c[1:, :]
+            # Needs a lot of samples but faster
+            mean_c, var_c = self.embed(coords)
+            mu_derivatives = mean_c[1:, :] - mean_c[0:-1, :]
             var_derivatives = var_c.diagonal()[1:] + var_c.diagonal()[0:-1] - 2 * (var_c[0:-1, 1:].diagonal())
             # mu, var = mu_{i+1} - mu_{i}, s_{i+1,i+1} + s_{i,i} - 2*s_{i,i+1}
 
         elif method == "obs_derivatives":
-            dc = coords[0:-1, :] - coords[1:, :]  # derivatives of the spline (dc/dt)
-            c = (coords[0:-1, :] + coords[1:, :]) / 2  # coordinates of derivatives
-            X = self.model.X_loc
-            Y = self.model.base_model.__dict__["y"].clone().detach().t()
-            X, Y = X.to(torch.float64), Y.to(torch.float64)  # num. precision
+            # Get the CubicSpline class and get the derivatives
+            dc = coords[1:, :] - coords[0:-1, :]  # derivatives of the spline (dc/dt)
+            c = coords[0:-1, :]  # coordinates of derivatives
+            X, Y = X.to(torch.float64), Y.to(torch.float64)
             c, dc = c.to(torch.float64), dc.to(torch.float64)
-            noise = self.model.base_model.noise_unconstrained.exp() ** 2
-            N, D, Ntest = Y.shape[0], Y.shape[1], dc.shape[0]
 
-            # kxx = self.evaluateKernel(X,X) + torch.eye(N)*noise
-            kxx = self.model.base_model.kernel.forward(X, X) + torch.eye(N) * noise
-            kinv = (kxx).cholesky().cholesky_inverse()
-            mu_derivatives = torch.zeros(Ntest, D)
-            var_derivatives = torch.zeros(Ntest)
+            kxx = self.model.base_model.kernel.forward(X, X) + torch.eye(N) * noise  # (N x N)
+            kinv = torch.cholesky_inverse(torch.linalg.cholesky(kxx))  # (N x N)
 
-            for nn in range(Ntest):
-                dk, ddk = self.evaluateDiffKernel(c[nn, :].unsqueeze(0), X)
-                var_star = ddk - dk.mm(kinv).mm(dk.T)  # var(df/dc)
-                # var(df/dt) = dc/dt * var(df/dc) * (dc/dt).T
-                var = dc[nn, :].unsqueeze(0).mm(var_star).mm(dc[nn, :].unsqueeze(0).T)
-                var_derivatives[nn] = var
-
+            for nn in range(Ntest - 1):
+                dk, ddk = self.evaluateDiffKernel(c[nn, :].unsqueeze(0), X)  # dk (N x q), ddk (1 x q x q)
+                var_star[nn, :, :] = ddk - dk.mm(kinv).mm(dk.T)  # (1 x q x q)
                 for dd in range(D):
-                    y = Y[:, dd].unsqueeze(1)
-                    mu_star = dk.mm(kinv).mm(y)  # mean(df/dc)
-                    mu = dc[nn, :].unsqueeze(0).mm(mu_star)  # mean(df/dt) = dc/dt * mean(df/dc)
-                    mu_derivatives[nn, dd] = mu
+                    y = Y[dd, :].unsqueeze(1)  # (N x 1)
+                    mu_star[nn, :, dd] = (dk.mm(kinv).mm(y))[0]  # (q x N) x (N x N) x (N x 1)
+
+            mu_derivatives = torch.einsum("bij, bi -> bj", mu_star, dc)
+            var_dc = torch.einsum("bij, bi -> bj", var_star, dc)
+            var_derivatives = torch.einsum("bi, bi -> b", dc, var_dc)
+
         return mu_derivatives, var_derivatives
 
     def jacobian_posterior(self, xstar):
+        # TODO: make sure this is working to compute the energy for Riemann function
         X = self.model.X_loc
-        Y = self.model.base_model.__dict__["y"].clone().detach().t()
+        Y = self.model.base_model.__dict__["y"].clone().detach()
         X, Y = X.to(torch.float64), Y.to(torch.float64)  # num. precision
         xstar = xstar.to(torch.float64)
-        # noise = self.model.base_model.noise_unconstrained.exp()**2
-        # raise
-        noise = 1e-7
-        N, D, d, Ntest = Y.shape[0], Y.shape[1], X.shape[1], xstar.shape[0]
-        mu_star, var_star = torch.empty(Ntest, d, D), torch.empty(Ntest, d, d)
+        noise = self.model.base_model.noise_unconstrained.exp() ** 2
+        D, N = Y.shape
+        Ntest, d = xstar.shape
 
-        # kxx = self.evaluateKernel(X,X) + torch.eye(N)*noise
+        mu_star, var_star = torch.empty(Ntest, d, D), torch.empty(Ntest, d, d)
         kxx = self.model.base_model.kernel.forward(X, X) + torch.eye(N) * noise
-        kinv = (kxx).cholesky().cholesky_inverse()
-        # print_is_positive_definite(kinv)
+        kinv = torch.cholesky_inverse(torch.linalg.cholesky(kxx))
+
         for nn in range(Ntest):
             dk, ddk = self.evaluateDiffKernel(xstar[nn, :].unsqueeze(0), X)
-            # print(dk)
-            # print(kinv)
-            # print(Y)
-            # raise
             var_star[nn, :, :] = ddk - dk.mm(kinv).mm(dk.T)  # var(df/dc)
-            mu_star[nn, :, :] = dk.mm(kinv).mm(Y)  # mean(df/dc)
-        #     print('---')
-        #     print_is_positive_definite(var_star[nn,:,:])
-        # raise
+            mu_star[nn, :, :] = dk.mm(kinv).mm(Y.T)  # mean(df/dc)
         return mu_star.to(torch.float32), var_star.to(torch.float32)
 
     def curve_energy(self, coords):
-        # n = self.model.X_loc.shape[0]
-        # D = self.model.base_model.__dict__['y'].shape[0]
-        n, D = self.data.shape
+        D, n = self.data.shape
+        dmu, dvar = self.derivatives(coords)
         if self.mode == "riemannian":
-            mu, var = self.embed_old2(coords)
-            # energy = (mu[1:,:] -mu[0:-1,:]).pow(2).sum() + D*(2*var[1:] - 2*var[0:-1]).sum()
-            energy = (mu[1:, :] - mu[0:-1, :]).pow(2).sum() + D * (2 * var.trace() - 2 * var[1:, 0:-1].trace())
+            energy = ((dmu.T) @ dmu).trace() + D * (dvar).sum()
         elif self.mode == "finslerian":
-            from .distributions import NonCentralNakagami
-
-            dmu, dvar = self.derivatives(coords)
             non_central_nakagami = NonCentralNakagami(dmu, dvar)
             energy = (non_central_nakagami.expectation() ** 2).sum()
-            # Comparison
-            # energy_riemann1 = energy + (non_central_nakagami.variance()).sum()
-            # mu, var = self.embed(coords)
-            # energy_riemann2 = (dmu@dmu.t()).trace()+D*(dvar**2).sum()
-            # print('{} energy_riemann1: {:.4f}'.format(self.mode, energy_riemann1.detach().numpy()))
-            # print('{} energy_riemann2: {:.4f}'.format(self.mode, energy_riemann2.detach().numpy()))
-        print("{} energy: {:.4f}".format(self.mode, energy.detach().numpy()))
-        # print('{} energy: {:.4f} \r'.format(self.mode, energy.detach().numpy()), end='\r')
+        print("{} energy: {:.4f} \r".format(self.mode, energy.detach().numpy()), end="\r")
         return energy
 
-    def evaluateDiffKernel_batch(self, xstar, X, kernel_type="rbf"):
+    def curve_length(self, curve: CubicSpline, dt=None):
+        """
+        Compute the discrete length of a given curve.
+
+        Input:
+            curve:      a Nx(d) torch Tensor representing a curve or
+                        a BxNx(d) torch Tensor representing B curves.
+
+        Output:
+            length:     a scalar or a B element Tensor containing the length of
+                        the curve.
+
+        Algorithmic note:
+            The default implementation of this function rely on the 'inner'
+            function, which in turn call the 'metric' function. For some
+            manifolds this can be done more efficiently, in which case it
+            is recommended that the default implementation is replaced.
+        """
+        if curve.dim() == 2:
+            curve.unsqueeze_(0)  # add batch dimension if one isn't present
+        if dt is None:
+            dt = 1.0  # (curve.shape[1]-1)
+        # Now curve is BxNx(d)
+        emb_curve, _ = self.embed(curve)  # BxNxD
+        emb_curve = emb_curve.unsqueeze_(0)
+        delta = emb_curve[:, 1:] - emb_curve[:, :-1]  # Bx(N-1)xD
+        speed = delta.norm(dim=2)  # Bx(N-1)
+        lengths = speed.sum(dim=1) * dt  # B
+        return lengths
+
+    def evaluateDiffKernel_batch(self, xstar, X, kernel_type=None):
         # TODO: find a workaournd to get batch with
         # functional.jacobian and functional.hessian
         """
@@ -342,7 +355,7 @@ class gplvm(Manifold):
             for point_index in range(nof_points):
                 mean = mu_J[point_index, :].view(1, -1).squeeze()
                 cov = kronecker(cov_J[point_index, :], torch.eye(D))
-                cov = torch.cholesky(cov) + torch.cholesky(cov.t(), upper=True)  # force symmetry
+                cov = torch.linalg.cholesky(cov) + torch.linalg.cholesky(cov.t(), upper=True)  # force symmetry
 
                 # Haven't tested that the mean should be explicitly be converted to double
                 # but I (cife) would think this is correct
@@ -386,3 +399,49 @@ class gplvm(Manifold):
         g_sample = torch.matmul(j_samples, j_samples.transpose(2, 3))
         # return g_sample
         return torch.mean(g_sample, dim=0)
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    from finsler.utils.helper import pickle_load
+
+    # load previously training gplvm model
+    model_saved = pickle_load(folder_path="trained_models/concentric_circles", file_name="model_3_500.pkl")
+    model = model_saved["model"]
+    Y = model_saved["Y"]
+    X = model_saved["X"]
+
+    # get Riemannian and Finslerian manifolds
+    gplvm_riemann = gplvm(model, mode="riemannian")
+    gplvm_finsler = gplvm(model, mode="finslerian")
+
+    num_points = 20
+    spline = torch.empty((num_points, 2))
+    spline[:, 0], spline[:, 1] = torch.linspace(-0.5, 0.5, num_points), torch.linspace(-0.5, 0.5, num_points)
+
+    def test_energy(gplvm, spline, D=3):
+        dmu, dvar = gplvm.derivatives(spline)
+        mean_c, var_c = gplvm.embed(spline)
+        ncn = NonCentralNakagami(dmu, dvar)
+
+        variance_term = (2 * (var_c.trace() - var_c[1:, 0:-1].trace()) - var_c[0, 0] - var_c[-1, -1]).sum()
+        mean_term = (mean_c[1:, :] - mean_c[0:-1, :]).pow(2).sum()
+
+        energy1 = ((dmu.T) @ dmu).trace() + D * (dvar).sum()
+        energy2 = mean_term + D * variance_term
+        energy3 = (ncn.expectation() ** 2 + ncn.variance()).sum()
+
+        # print(energy1, energy2, energy3)
+        torch.testing.assert_allclose(
+            energy1, energy2, msg="Not enough data points in spline or error while computing the derivatives"
+        )
+
+        torch.testing.assert_allclose(
+            energy1, energy3, msg="Error with the derivative or with Non Central Nakagami function"
+        )
+
+    # test_energy(gplvm_riemann, spline)
+
+    # J_mu, J_cov = gplvm_riemann.jacobian_posterior(spline)
+    # dmu, dvar = gplvm.derivatives(spline)

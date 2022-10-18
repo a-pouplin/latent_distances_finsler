@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import matplotlib.pyplot as plt
 import numdifftools as nd
@@ -6,13 +7,13 @@ import numpy as np
 from matplotlib.path import Path
 from scipy.special import gamma, hyp1f1
 
-from finsler.utils.helper import psd_matrix
+from finsler.utils.helper import create_folder, psd_matrix
 from finsler.visualisation.indicatrices import PolyArea, contour_bounds
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outDir", default="latent_distances_finsler/plots/indicatrices/", type=str)
+    parser.add_argument("--outDir", default="plots/indicatrices/comparison", type=str)
     parser.add_argument("--seed", default=7, type=int)
     opts = parser.parse_args()
     return opts
@@ -59,7 +60,8 @@ class Volume:
         indicatrix_vol = np.sum(1.0 * (image < 1))
         return indicatrix_vol * (scale**2)
 
-    def finsler2(self, image, vectors):
+    def indicatrix2(self, image, vectors):
+        "other way to compute the volume of the indictarix based on the contour plot"
         figc, axc = plt.subplots(1, 1)
         vec_size = len(vectors)
         vec_values = (np.max(vectors) - np.min(vectors)) ** 2
@@ -68,16 +70,19 @@ class Volume:
         sgm = cs.allsegs[0][0]
         # sgm = cs.collections[0].get_segments()[0]
         eps = 1e-2
-        assert (abs(sgm[0, 0] - sgm[-1, 0]) < eps) and (abs(sgm[0, 1] - sgm[-1, 1]) < eps), "Contour not closed!"
+        if (abs(sgm[0, 0] - sgm[-1, 0]) > eps) or (abs(sgm[0, 1] - sgm[-1, 1]) > eps):
+            print("Contour not closed!")
+            return np.nan
         pp = cs.collections[0].get_paths()[0].vertices / vec_size  # - [0.5,0.5] + points[nn]
         codes = Path.CURVE3 * np.ones(len(pp), dtype=Path.code_type)
         codes[0] = codes[-1] = Path.MOVETO
         path = Path(pp, codes)
-        volume_indicatrix = PolyArea(path.vertices) * (vec_values)
-        return np.pi / volume_indicatrix
+        return PolyArea(path.vertices) * (vec_values)
 
-    def finsler(self, image, vectors):
-        return np.pi / self.indicatrix(image, vectors)
+    def hausdorff(self, image, vectors):
+        "used to compute any volume: riemannian or finslerian"
+        "can also be: np.pi / self.indicatrix2(image, vectors)"
+        return np.pi / self.indicatrix2(image, vectors)
 
     def riemann(self, cov, mean, D):
         return np.sqrt(np.linalg.det(D * cov + mean))
@@ -207,8 +212,13 @@ def automated_scaling(metric):
 if __name__ == "__main__":
 
     opts = get_args()
+    print("options: {}".format(opts))
 
-    for opts.seed in range(21):
+    folderpath = os.path.abspath(opts.outDir)
+    create_folder(folderpath)
+    print("--- figures saved in:", folderpath)
+
+    for opts.seed in range(5):
         np.random.seed(opts.seed)  # 12 #31
         mean = psd_matrix(1e-6 + np.random.rand(2))
         # mean = np.empty((2,2))
@@ -225,13 +235,13 @@ if __name__ == "__main__":
         riemann_indicatrix = indicatrix.explicit_riemann(cov, mean)
         lower_indicatrix = indicatrix.explicit_lower(cov)
 
-        print("indicatrix_comparison_{}".format(opts.seed))
+        print("indicatrix_{}".format(opts.seed))
         contour_bounds(
             finsler_indicatrix,
             riemann_indicatrix,
             lower_indicatrix,
-            opts.outDir,
+            folderpath,
             # title="mean: {}, cov: {}".format(mean, cov),
-            name="indicatrix_comparison_{}".format(opts.seed),
+            name="indicatrix_{}".format(opts.seed),
             legend=True,
         )

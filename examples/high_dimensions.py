@@ -1,19 +1,20 @@
 import argparse
+import os
+from logging import raiseExceptions
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples.indicatrices import Indicatrices, Tensor, automated_scaling
+from examples.indicatrices import Indicatrices, Tensor, Volume, automated_scaling
+from finsler.utils.helper import create_folder
 from finsler.visualisation.indicatrices import contour_high_dim, contour_test
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outDir", default="latent_distances_finsler/plots/high_dimensions/", type=str)
-    parser.add_argument("--seed", default=8, type=int)
+    parser.add_argument("--outDir", default="plots/high_dimensions/", type=str)
     parser.add_argument("--q", default=2, type=int)
-    parser.add_argument("--D", default=5, type=int)
-    parser.add_argument("--num_samples", default=100, type=int)
+    parser.add_argument("--num_samples", default=100, type=int)  # used for 'resolution'
     opts = parser.parse_args()
     return opts
 
@@ -25,16 +26,15 @@ def matrix_histogram(J, G):
     plt.show()
 
 
-def test_simulation():
-    np.random.seed(opts.seed)
+def test_simulation(D=5):
     loc = 0
     scale = np.random.random()
-    size = (opts.q, opts.D, opts.num_samples)
+    size = (opts.q, D, opts.num_samples)
     ncgaussian = np.random.normal(loc, scale, size)
     ncwihsart = np.einsum("ijk,mjk->imk", ncgaussian, ncgaussian)
 
     exp_whishart = np.mean(ncwihsart, axis=2)
-    cov = exp_whishart / opts.D
+    cov = exp_whishart / D
     mean = np.empty(cov.shape)
 
     alpha = automated_scaling(exp_whishart)
@@ -53,26 +53,75 @@ def test_simulation():
         riemann_expl,
         opts.outDir,
         # title="mean: {}, cov: {}".format(mean, cov),
-        name="check_{}".format(opts.seed),
+        name="check",
     )
+
+
+def plot_volume_relative(dims, volumes, title="plot_dims"):
+    dims = np.array(dims)
+    fig, ax = plt.subplots(1)
+    ax.plot(dims, volumes, c="black", linewidth=1, linestyle="dashed", alpha=0.2)
+    ax.plot(dims, np.mean(volumes, axis=1), c="black", linewidth=1, label="average difference of volume")
+    ax.plot(dims, 1 / dims, c="red", linewidth=1, label=r"$f(x)=\frac{1}{x}$")
+
+    ax.fill_between(
+        dims,
+        np.mean(volumes, axis=1) - 1.96 * np.std(volumes, axis=1),
+        np.mean(volumes, axis=1) + 1.96 * np.std(volumes, axis=1),
+        color="papayawhip",
+        alpha=0.5,
+    )
+    ax.set_title(r"$\frac{V_G(x) - V_F(x)}{V_G(x)}$ with respect to the number of dimensions")
+    ax.set_xlabel("dimensions")
+    ax.set_ylabel("volume difference")
+    ax.set_xlim(dims[0], dims[-1])
+    ax.set_ylim(0, np.max(volumes))
+    ax.legend(loc="upper right")
+    fig.savefig(os.path.join(opts.outDir, "{}.svg".format(title)), dpi=fig.dpi, bbox_inches="tight")
+    plt.show()
+
+
+def plot_volume_absolute(dims, finsler, riemann, lower, out_dir, name, title=None):
+    fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+    plt.plot(dims, finsler.transpose(), colors="tab:orange")
+    plt.plot(dims, riemann.transpose(), colors="tab:purple")
+    # plt.plot(dims, lower.transpose(), colors="tab:green")
 
 
 if __name__ == "__main__":
     opts = get_args()
+    print("options: {}".format(opts))
 
-    dims = [3, 5, 50]
+    folderpath = os.path.abspath(opts.outDir)
+    create_folder(folderpath)
+    print("--- figures saved in:", folderpath)
+
+    dims = [3, 5, 10, 50]
+    seeds = range(4, 8)
+
+    # # for more data points (relevant for plotting the relative volume ratio w/ dims)
+    # dims = np.geomspace(3,100,10).astype(int)
+    # seeds = range(4,16)
+
     finsler_indicatrices = np.empty((len(dims), 64, 64))
     riemann_indicatrices = np.empty((len(dims), 64, 64))
     size = (opts.q, dims[-1], opts.num_samples)  # J.T used here for compute
 
-    for opts.seed in range(21):
-        np.random.seed(opts.seed)  # 12 #31
+    volume = Volume()
+    finsler_volumes = np.empty((len(seeds), len(dims)))
+    riemann_volumes = np.empty((len(seeds), len(dims)))
+    rel_diff_volumes = np.empty((len(seeds), len(dims)))
+
+    for ids, opts.seed in enumerate(seeds):
+        np.random.seed(opts.seed)
         # simulate central gaussian and central wishart
-        loc = np.random.randn()
-        scale = np.random.random()
+        scale = np.random.uniform(low=0.0, high=10, size=1)
+        # loc = np.random.uniform(low=-10, high=10, size=1)
+        loc = np.sqrt(scale)
+        print("loc {}, scale {}".format(loc, scale))
         ncgauss = np.random.normal(loc, scale, size)
 
-        for idx, dim in enumerate(dims):
+        for idd, dim in enumerate(dims):
             ncgauss_tronc = ncgauss[:, :dim, :]
             print("dimension: {}".format(ncgauss_tronc.shape))
             ncwihsart = np.einsum("ijk,mjk->imk", ncgauss_tronc, ncgauss_tronc)
@@ -83,8 +132,11 @@ if __name__ == "__main__":
 
             vectors = np.linspace(-1.1 * alpha, 1.1 * alpha, 64)
             indicatrix = Indicatrices(3, vectors)
-            finsler_indicatrices[idx] = indicatrix.simulated_finsler(ncwihsart)
-            riemann_indicatrices[idx] = indicatrix.simulated_riemann(ncwihsart)
+            finsler_indicatrices[idd] = indicatrix.simulated_finsler(ncwihsart)
+            riemann_indicatrices[idd] = indicatrix.simulated_riemann(ncwihsart)
+
+            finsler_volumes[ids, idd] = volume.hausdorff(finsler_indicatrices[idd], vectors)
+            riemann_volumes[ids, idd] = volume.hausdorff(riemann_indicatrices[idd], vectors)
 
         contour_high_dim(
             finslers=finsler_indicatrices,
@@ -92,6 +144,9 @@ if __name__ == "__main__":
             dims=dims,
             out_dir=opts.outDir,
             # title="mean: {}, cov: {}".format(mean, cov),
-            name="high_dim_seed_{}".format(opts.seed),
+            name="highdim_{}".format(opts.seed),
         )
-        print("high_dim_seed_{} was saved!".format(opts.seed))
+        print("highdim_{} was saved!".format(opts.seed))
+
+    vols = ((riemann_volumes - finsler_volumes) / riemann_volumes).transpose()
+    plot_volume_relative(dims, vols, title="volumeratio")

@@ -3,110 +3,65 @@
 import argparse
 import os
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
 from stochman.curves import CubicSpline
-from stochman.geodesic import geodesic_minimizing_energy
+from stochman.geodesic import geodesic_minimizing_energy, geodesic_minimizing_energy_sgd
 
 from finsler.gplvm import gplvm
-from finsler.utils.data import make_sphere_surface, on_sphere
-from finsler.utils.helper import create_filepath, create_folder, pickle_load
+from finsler.utils.data import make_torus_surface, on_torus
+from finsler.utils.helper import pickle_load
 from finsler.visualisation.latent import volume_heatmap
-
-matplotlib.rcParams["svg.fonttype"] = "none"
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     # manifold argments
     parser.add_argument("--num_geod", default=5, type=int)  # num of random geodesics to plot
-    parser.add_argument("--iter_energy", default=100, type=int)  # num of steps to minimise energy func
+    parser.add_argument("--iter_energy", default=500, type=int)  # num of steps to minimise energy func
     # data used
-    parser.add_argument("--data", default="starfish_sphere", type=str)  # sphere or starfish_sphere or vMF
+    parser.add_argument("--data", default="torus", type=str)  # sphere or qPCR or font or starfish
     # load previous exp
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--model_folder", default="trained_models/", type=str)
-    parser.add_argument("--exp_folder", default="plots/spheres/", type=str)
+    parser.add_argument("--exp_folder", default="plots/torus/", type=str)
+    parser.add_argument("--title_model", default="", type=str)
+    parser.add_argument("--final_plots", default="/Users/alpu/Desktop/Finsler_figures/plots", type=str)
     opts = parser.parse_args()
     return opts
-
-
-def color_latent_data(X):
-    fig = plt.figure(0)
-    ax = plt.axes()
-    # ax, im, _ = volume_heatmap(ax, gplvm_riemann, X, mode='vol_riemann', vmin=-1.5)
-    ax.scatter(X[:, 0], X[:, 1], color="black", s=1)
-    return ax
-
-
-def compute_heatmaps(n_grid):
-    for mode in ["variance"]:
-        print(mode)
-        fig = plt.figure(0)
-        ax = plt.axes()
-        ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode, n_grid)  # , vmin=-3, vmax=0.5)
-        ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
-        fig.colorbar(im)
-        plt.title("{}".format(mode))
-        # plt.show()
-        fig.savefig(os.path.join(exp_folder, "heatmap_{}_{}{}.png".format(n_grid, mode, opts.title_model)), dpi=fig.dpi)
-        fig.savefig(os.path.join(opts.final_plots, "heatmap_{}_{}_{}.svg".format(n_grid, mode, opts.data)))
-
-
-def far_away_points(X, num_points=50):
-    index = np.argsort(np.linalg.norm(X, axis=1))[-num_points:]
-    return X[index]
-
-
-def get_angles(X):
-    if len(X.shape) == 1:
-        X = np.expand_dims(X, axis=0)
-    angles = np.arctan2(X[:, 1], X[:, 0])
-    return np.rad2deg(angles)
-
-
-def get_corner_starfish(X, thres=20):
-    points = far_away_points(X)  # the num_pts far away points
-    angles = get_angles(points)  # the corresponding angles in deg
-    to_keep = np.empty((5, 2))
-    for i in range(5):
-        to_keep[i] = points[0]  # points array is updated each loop
-        ind = (angles < angles[0] - thres) | (angles > angles[0] + thres)
-        points = points[ind]
-        angles = angles[ind]
-    return to_keep
 
 
 if __name__ == "__main__":
 
     opts = get_args()
     print("options: {}".format(opts))
-
-    folderpath = os.path.abspath(os.path.join(opts.exp_folder, opts.data))
-    create_folder(folderpath)
-    print("--- figures saved in:", folderpath)
+    exp_folder = opts.exp_folder
+    print("figures saved in:", exp_folder)
 
     # load previously training gplvm model
     model_folder = os.path.join(opts.model_folder, opts.data)
-    model_saved = pickle_load(folder_path=model_folder, file_name="model.pkl")
+    model_saved = pickle_load(folder_path=model_folder, file_name="model{}.pkl".format(opts.title_model))
     model = model_saved["model"]
     Y = model_saved["Y"]
     X = model_saved["X"]
-    lengthscale = model.base_model.kernel.lengthscale_unconstrained
-    variance = model.base_model.kernel.variance_unconstrained
-    print("Y shape: {} -- variance: {:.2f}, lengthscale: {:.2f}".format(Y.shape, variance, lengthscale))
+    print(Y.shape)
 
     # get Riemannian and Finslerian metric
     gplvm_riemann = gplvm(model, mode="riemannian")
     gplvm_finsler = gplvm(model, mode="finslerian")
     X = model.X_loc.detach().numpy()
 
+    # x_random = np.random.uniform(low=np.min(X), high=np.max(X), size=(100, 2))
+    # x_random = torch.tensor(x_random, dtype=torch.float32)
+    # y_random = gplvm_riemann.embed(x_random)[0].detach().numpy()  # y_random_mean
+    # print('Percentage of latent points on torus: {:.2f}'.format(100*on_torus(y_random)))
+
+    # raise
     # Energy function computed with riemannian metric
     optimizer = torch.optim.LBFGS
-    eval_grid = 20
+    eval_grid = 100
     dim_latent, dim_obs = X.shape[1], Y.shape[1]
     c_coords_riemann, c_obs_riemann = torch.empty((opts.num_geod, eval_grid, dim_latent)), np.empty(
         (opts.num_geod, eval_grid, dim_obs)
@@ -116,13 +71,10 @@ if __name__ == "__main__":
     )
     t = torch.linspace(0, 1, eval_grid)
 
-    if opts.data == "vMF":
-        x1 = [X[150], X[250], X[350], X[450]]
-        x0 = np.tile(X[0], (len(x1), 1))
-
-    elif opts.data == "starfish_sphere":
-        x1 = get_corner_starfish(X[:400])
-        x0 = np.tile([0, 0], (len(x1), 1))
+    x0_index = np.argmax(np.linalg.norm(X, axis=1))
+    x0 = np.tile(X[x0_index], (opts.num_geod, 1))
+    X_m = X[np.linalg.norm(X - X[x0_index], axis=1) < 4]
+    x1 = X_m[np.random.choice(X_m.shape[0], opts.num_geod, replace=False)]
 
     for i in range(opts.num_geod):
         start, ends = torch.tensor([x0[i]], dtype=torch.float), torch.tensor([x1[i]], dtype=torch.float)
@@ -147,7 +99,7 @@ if __name__ == "__main__":
     colors = sns.color_palette("viridis", n_colors=opts.num_geod)
     fig = plt.figure(1)
     ax = plt.axes()
-    ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode="vol_riemann", n_grid=5)
+    ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode="variance", n_grid=5)
     for i in range(opts.num_geod):
         ax.plot(c_coords_riemann[i, ::2, 0], c_coords_riemann[i, ::2, 1], c=colors[i], lw=1, alpha=0.5)
         ax.plot(c_coords_finsler[i, 1::2, 0], c_coords_finsler[i, 1::2, 1], c=colors[i], lw=1, ls=":")
@@ -155,20 +107,17 @@ if __name__ == "__main__":
     fig.colorbar(im)
     plt.title("Geodesic in the latent space")
     plt.show()
-
-    filename = "latent.png"
-    filepath = create_filepath(folderpath, filename)
-    fig.savefig(filepath, dpi=fig.dpi)
-    print("--- plot of the latent space saved as: {}".format(filepath))
+    fig.savefig(os.path.join(exp_folder, "latent{}.png".format(opts.title_model)), dpi=fig.dpi)
+    fig.savefig(os.path.join(opts.final_plots, "latent_{}.svg".format(opts.data)))
 
     # plot observational space with geodesics
     fig = plt.figure(2)
     ax = plt.axes(projection="3d")
-    ax.set_box_aspect([1, 1, 1])
-    XS, YS, ZS = make_sphere_surface()  # for illustration
+    ax.set_box_aspect((np.ptp(Y[:, 0]), np.ptp(Y[:, 1]), np.ptp(Y[:, 2])))
+    XS, YS, ZS = make_torus_surface()  # for illustration
     ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.5, zorder=0)
     ax.scatter3D(
-        Y[:, 0], Y[:, 1], Y[:, 2], label="observed data", marker="o", edgecolors="black", s=1, zorder=2
+        Y[:500, 0], Y[:500, 1], Y[:500, 2], label="observed data", marker="o", edgecolors="black", s=1, zorder=2
     )  # observed data points
     # ax.scatter3D(y_random[:,0], y_random[:,1], y_random[:,2], c='green', s=1, label='random latent data', alpha=0.2) # random points taken from the latent
     for i in range(opts.num_geod):
@@ -192,13 +141,9 @@ if __name__ == "__main__":
             label="Finsler",
             zorder=10,
         )
-    ax.legend(bbox_to_anchor=(1.5, 1))
-    ax.set_xlim((-1, 1)), ax.set_ylim((-1, 1)), ax.set_zlim((-1, 1))
     ax.grid(False)
     ax.axis("off")
     plt.show()
-
-    filename = "observational.png"
-    filepath = create_filepath(folderpath, filename)
-    fig.savefig(filepath, dpi=fig.dpi)
-    print("--- plot of the observation space saved as: {}".format(filepath))
+    fig.savefig(os.path.join(exp_folder, "observational.png"), dpi=fig.dpi)
+    fig.savefig(os.path.join(opts.final_plots, "observational_{}.svg".format(opts.data)))
+    # pickle_save(fig, opts.exp_folder,file_name='plot_test{}.pkl'.format(opts.data)) # use pickle to save the matplotlib object

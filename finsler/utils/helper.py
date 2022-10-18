@@ -380,18 +380,19 @@ def automated_scaling(metric):
     if torch.is_tensor(metric):
         metric = torch.squeeze(metric).detach().numpy()
     eigvalues, _ = np.linalg.eig(metric)
-    ratio = np.max(eigvalues) / np.min(eigvalues)
-    # this is awful and arbitrary
-    if ratio < 10:
-        vec_size = 8
-    elif 10 < ratio < 50:
-        vec_size = 16
-    elif 50 < ratio < 200:
-        vec_size = 32
-    elif 200 < ratio:
-        vec_size = 64
-    else:
-        vec_size = 16
+    vec_size = 64
+    # ratio = np.max(eigvalues) / np.min(eigvalues)
+    # # this is awful and arbitrary
+    # if ratio < 10:
+    #     vec_size = 8
+    # elif 10 < ratio < 50:
+    #     vec_size = 16
+    # elif 50 < ratio < 200:
+    #     vec_size = 32
+    # elif 200 < ratio:
+    #     vec_size = 64
+    # else:
+    #     vec_size = 16
     return 1 / np.sqrt(np.min(eigvalues)), vec_size
 
 
@@ -468,5 +469,27 @@ def psd_matrix(eigval):
 
 
 def is_pos_def(x):
-    "check if matrix is psd"
+    "check if matrix is pd"
     return np.all(np.linalg.eigvals(x) > 0)
+
+
+def to_np(x):
+    return np.squeeze(x.detach().numpy())
+
+
+def to_torch(x):
+    return torch.from_numpy(x)
+
+
+def create_folder(pathname):
+    if not os.path.isdir(pathname):
+        os.makedirs(pathname)
+
+
+def create_filepath(pathname, filename):
+    filename, extsn = filename.split(".")
+    filenum = 0
+    filepath = str(pathname + "/" + filename + "_")
+    while os.path.exists(filepath + str(filenum) + "." + extsn):
+        filenum += 1
+    return filepath + str(filenum) + "." + extsn
