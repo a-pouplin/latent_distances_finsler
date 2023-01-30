@@ -13,10 +13,8 @@ install_requires = ["numpy>=1.20.0", "torch>=1.9.0", "scikit-learn>=1.0.2"]
 setup(
     name="finsler",
     version="1.0.0",
-    description="Code for Finsler random geometry",
-    author="Alison",
-    author_email="alpu@dtu.dk",
-    url="https://github.com/a-pouplin/latent_distances_finsler",
+    description="Identifying latent distances with Finslerian geomtry",
+    author="anonympus",
     packages=find_packages(),
     setup_requires=setup_requires,
     tests_require=tests_require,

@@ -144,3 +144,5 @@ dmypy.json
 plots/
 tests/
 trained_models/
+models/
+wandb/

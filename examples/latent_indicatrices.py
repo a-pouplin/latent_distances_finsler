@@ -11,7 +11,7 @@ import torch
 from stochman.curves import CubicSpline
 from stochman.geodesic import geodesic_minimizing_energy
 
-from finsler.gplvm import gplvm
+from finsler.gplvm import Gplvm
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
 from finsler.visualisation.latent import (
     plot_indicatrices,
@@ -27,12 +27,12 @@ def get_args():
     parser.add_argument("--num_geod", default=1, type=int)  # num of random geodesics to plot
     parser.add_argument("--iter_energy", default=300, type=int)  # num of steps to minimise energy func
     # data used
-    parser.add_argument("--data", default="starfish_sphere", type=str)  # sphere or qPCR or font or starfish
+    parser.add_argument("--data", default="starfish", type=str)  # sphere or qPCR or font or starfish
     # load previous exp
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--model_folder", default="trained_models/", type=str)
-    parser.add_argument("--exp_folder", default="plots/indicatrices/latent/", type=str)
-    parser.add_argument("--exp_num", default="9", type=str)  # number of the experiment to use for plotting
+    parser.add_argument("--exp_folder", default="plots/latent_indicatrices/", type=str)
+    parser.add_argument("--exp_num", default="17", type=str)  # number of the experiment to use for plotting
     opts = parser.parse_args()
     return opts
 
@@ -82,11 +82,6 @@ def plot_geodesics(X, Y, opts):
     )
     t = torch.linspace(0, 1, eval_grid)
 
-    # angle = np.deg2rad(60) # 45
-    # radius = 1.5 # 2.0
-    # x0 = [[radius*np.cos(angle + i*(2*np.pi/5)), radius*np.sin(angle + i*(2*np.pi/5))] for i in range(5)]
-    # x1 = np.roll(x0,2)
-
     x1 = get_corner_starfish(X[:400])
     x0 = np.tile([0, 0], (len(x1), 1))
     for i in range(opts.num_geod):
@@ -124,16 +119,15 @@ if __name__ == "__main__":
     model_folder = os.path.join(opts.model_folder, opts.data)
     model_saved = pickle_load(folder_path=model_folder, file_name="model_{}.pkl".format(opts.exp_num))
     model = model_saved["model"]
-    Y = model_saved["Y"]
-    X = model_saved["X"]
-    lengthscale = model.base_model.kernel.lengthscale_unconstrained
-    variance = model.base_model.kernel.variance_unconstrained
+    Y = model.y.data.numpy().transpose()
+    X = model.X.data.numpy()
+    lengthscale = model.kernel.lengthscale_unconstrained.data
+    variance = model.kernel.variance_unconstrained.data
     print("Y shape: {} -- variance: {:.2f}, lengthscale: {:.2f}".format(Y.shape, variance, lengthscale))
 
     # get Riemannian and Finslerian metric
-    gplvm_riemann = gplvm(model, mode="riemannian")
-    gplvm_finsler = gplvm(model, mode="finslerian")
-    X = model.X_loc.detach().numpy()
+    gplvm_riemann = Gplvm(model, mode="riemannian")
+    gplvm_finsler = Gplvm(model, mode="finslerian")
 
     # plot latent space with indicatrices
     fig = plt.figure(1)
