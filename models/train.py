@@ -94,6 +94,7 @@ def update(optimizer, model, n_samples, X_true=None):
 
 def model_pipeline(config=None):
     # initialise wandb
+    print(config)
     wandb.init(config=config)
     config = wandb.config
 
@@ -119,8 +120,13 @@ def model_pipeline(config=None):
                 ),
                 end="\r",
             )
+
+        # if iter % 1000 == 0:
+        # table = wandb.Table(data=model.X.data.numpy(), columns=["xp", "yp"])
+        # wandb.log({"X": wandb.plot.scatter(table, "xp", "yp", title="Latent space predicted")})
         # elif loss < -0.1:
         #     break
+
         wandb.log({"loss": loss, "grad": max_grad, "lengthscale": lengthscale, "variance": variance})
 
     # save model
@@ -159,32 +165,32 @@ if __name__ == "__main__":
         print("--- sweep mode ---")
         # sweep config parameters
         sweep_dict = {
-            "lr": {"distribution": "log_uniform", "min": -5, "max": -3},
-            "iter": {"distribution": "int_uniform", "min": 5000, "max": 30000},
-            "kernel": {"values": ["Matern52"]},
-            "lengthscale": {"distribution": "uniform", "min": 0.5, "max": 2.0},
-            "variance": {"distribution": "uniform", "min": 0.1, "max": 0.5},
-            "noise": {"values": [0.01]},
+            "lr": {"distribution": "log_uniform", "min": -6, "max": -4},
+            "iter": {"distribution": [10000]},
+            "kernel": {"values": ["RBF", "Matern32", "Matern52", "Periodic"]},
+            "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
+            "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
+            "noise": {"values": [1e-4, 1e-5, 1e-6]},
         }
 
         sweep_config = {
-            "method": "bayes",
+            "method": "random",
             "name": "sweep",
             "metric": {"name": "comb", "goal": "minimise"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep_periodic")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
         print("--- single run mode ---")
         # best params
         config_params = {
-            "lr": 0.001,
-            "iter": 10000,
-            "kernel": "Matern52",
-            "lengthscale": 1.5,
-            "variance": 0.1,
-            "noise": 0.01,
+            "lr": 1e-4,
+            "iter": 20000,
+            "kernel": "RBF",
+            "lengthscale": 0.3,
+            "variance": 1.0,
+            "noise": 1e-4,
         }
         model_pipeline(config=config_params)
