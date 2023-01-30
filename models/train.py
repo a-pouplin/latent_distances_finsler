@@ -170,7 +170,7 @@ if __name__ == "__main__":
             "kernel": {"values": ["RBF", "Matern32", "Matern52", "Periodic"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
-            "noise": {"values": [1e-4, 1e-5, 1e-6]},
+            "noise": {"values": [1e-4]},
         }
 
         sweep_config = {
