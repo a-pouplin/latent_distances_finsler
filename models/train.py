@@ -82,10 +82,10 @@ def save_model(model, folderpath):
 def update(optimizer, model, n_samples, X_true=None):
     loss_fn = pyro.infer.Trace_ELBO().differentiable_loss  # Trace_ELBO
     loss = loss_fn(model.model, model.guide) / n_samples
-    if X_true is not None:
-        X = model.X.data.numpy()
-        dist = np.mean(np.linalg.norm(X - X_true, axis=-1))
-        loss = loss + dist
+    # if X_true is not None:
+    #     X = model.X.data.numpy()
+    #     dist = np.mean(np.linalg.norm(X - X_true, axis=-1))
+    #     loss = loss + dist
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         # sweep config parameters
         sweep_dict = {
             "lr": {"distribution": "log_uniform", "min": -6, "max": -4},
-            "iter": {"values": [10000]},
+            "iter": {"values": [15000]},
             "kernel": {"values": ["RBF", "Matern32", "Matern52", "Periodic"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
@@ -180,7 +180,7 @@ if __name__ == "__main__":
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep_periodic")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep_periodic2")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
         print("--- single run mode ---")
