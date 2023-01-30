@@ -30,7 +30,7 @@ def get_args():
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--exp_folder", default="plots/starfish/", type=str)
     parser.add_argument("--model_folder", default="models/starfish/", type=str)
-    parser.add_argument("--model_title", default="model_0", type=str)
+    parser.add_argument("--model_title", default="model_197", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -59,7 +59,7 @@ def compute_heatmaps(n_grid):
         fig.savefig(os.path.join(opts.final_plots, "heatmap_{}_{}_{}.svg".format(n_grid, mode, opts.data)))
 
 
-def far_away_points(X, num_points=50):
+def far_away_points(X, num_points=100):
     index = np.argsort(np.linalg.norm(X, axis=1))[-num_points:]
     return X[index]
 
@@ -71,7 +71,7 @@ def get_angles(X):
     return np.rad2deg(angles)
 
 
-def get_corner_starfish(X, thres=20):
+def get_corner_starfish(X, thres=30):
     points = far_away_points(X)  # the num_pts far away points
     angles = get_angles(points)  # the corresponding angles in deg
     to_keep = np.empty((5, 2))
