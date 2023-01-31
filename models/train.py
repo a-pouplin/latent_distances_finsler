@@ -165,8 +165,8 @@ if __name__ == "__main__":
         print("--- sweep mode ---")
         # sweep config parameters
         sweep_dict = {
-            "lr": {"values": [1e-3, 1e-4]},
-            "iter": {"values": [20000, 30000, 40000]},
+            "lr": {"values": [1e-2, 1e-3]},
+            "iter": {"values": [30000, 40000]},
             "kernel": {"values": ["Matern32"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
