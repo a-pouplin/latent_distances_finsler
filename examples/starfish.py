@@ -23,14 +23,14 @@ def get_args():
     parser = argparse.ArgumentParser()
     # manifold argments
     parser.add_argument("--num_geod", default=5, type=int)  # num of random geodesics to plot
-    parser.add_argument("--iter_energy", default=100, type=int)  # num of steps to minimise energy func
+    parser.add_argument("--iter_energy", default=400, type=int)  # num of steps to minimise energy func
     # data used
     parser.add_argument("--data", default="starfish", type=str)  # sphere or starfish or vMF
     # load previous exp
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--exp_folder", default="plots/starfish/", type=str)
     parser.add_argument("--model_folder", default="models/starfish/", type=str)
-    parser.add_argument("--model_title", default="model_200", type=str)
+    parser.add_argument("--model_title", default="model", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -59,30 +59,6 @@ def compute_heatmaps(n_grid):
         fig.savefig(os.path.join(opts.final_plots, "heatmap_{}_{}_{}.svg".format(n_grid, mode, opts.data)))
 
 
-def far_away_points(X, num_points=100):
-    index = np.argsort(np.linalg.norm(X, axis=1))[-num_points:]
-    return X[index]
-
-
-def get_angles(X):
-    if len(X.shape) == 1:
-        X = np.expand_dims(X, axis=0)
-    angles = np.arctan2(X[:, 1], X[:, 0])
-    return np.rad2deg(angles)
-
-
-def get_corner_starfish(X, thres=30):
-    points = far_away_points(X)  # the num_pts far away points
-    angles = get_angles(points)  # the corresponding angles in deg
-    to_keep = np.empty((5, 2))
-    for i in range(5):
-        to_keep[i] = points[0]  # points array is updated each loop
-        ind = (angles < angles[0] - thres) | (angles > angles[0] + thres)
-        points = points[ind]
-        angles = angles[ind]
-    return to_keep
-
-
 if __name__ == "__main__":
 
     opts = get_args()
@@ -94,7 +70,6 @@ if __name__ == "__main__":
 
     # load previously training gplvm model
     model = pickle_load(folder_path=f"{opts.model_folder}", file_name=f"{opts.model_title}.pkl")
-    # model = model['model']
     Y = model.y.data.numpy().transpose()
     X = model.X.data.numpy()
     lengthscale = model.kernel.lengthscale_unconstrained.data
@@ -119,7 +94,7 @@ if __name__ == "__main__":
     t = torch.linspace(0, 1, eval_grid)
 
     # computing geodesic curves along the starfish branches
-    x1 = get_corner_starfish(X[:400])
+    x1 = [[-2, -2], [-2, 1.5], [1, 2.5], [2.5, 0], [1.0, -2.5]]
     x0 = np.tile([0, 0], (len(x1), 1))
 
     for i in range(opts.num_geod):

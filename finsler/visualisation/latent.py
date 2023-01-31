@@ -139,10 +139,13 @@ def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None
             patch = PathPatch(path, linewidth=1, edgecolor="tab:orange", fill=False)
             ax.add_patch(patch)
 
+    max_norm = 2 * np.max(np.linalg.norm(X, axis=-1))
     im = ax.imshow(
         grid,
         # extent=(Xmin[0], Xmax[0], Xmin[1], Xmax[1]),
+        # extent = (-max_norm, max_norm, -max_norm, max_norm),
         extent=(-4, 4, -4, 4),
+        # extent=(-6, 6, -6, 6),
         origin="lower",
         cmap=cmap_sns,
         aspect="auto",

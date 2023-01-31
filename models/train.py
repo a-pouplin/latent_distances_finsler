@@ -26,7 +26,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     # initialisation
     parser.add_argument("--data", default="starfish", type=str)  # train for starfish data
-    parser.add_argument("--sweep", action="store_false")
+    parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--exp_folder", default="models/", type=str)
     opts = parser.parse_args()
     return opts
@@ -63,11 +63,10 @@ def test(model, X_true):
     acc_obs = on_sphere(y_random)  # 1 if on sphere, 0 if not
 
     # compute difference between true and trained latent points
-    dist = np.mean(np.linalg.norm(X_true - X, axis=-1))  # the smaller the better
+    # not necessary a meaningful metric
+    dist = np.mean(np.linalg.norm(X_true - X, axis=-1))
 
-    # combinaison of two metrics
-    comb_metrics = 0.5 * np.abs(1 - acc_obs) + 0.5 * dist
-    return acc_obs, dist, comb_metrics
+    return acc_obs, dist
 
 
 def save_model(model, folderpath):
@@ -82,10 +81,6 @@ def save_model(model, folderpath):
 def update(optimizer, model, n_samples, X_true=None):
     loss_fn = pyro.infer.Trace_ELBO().differentiable_loss  # Trace_ELBO
     loss = loss_fn(model.model, model.guide) / n_samples
-    # if X_true is not None:
-    #     X = model.X.data.numpy()
-    #     dist = np.mean(np.linalg.norm(X - X_true, axis=-1))
-    #     loss = loss + dist
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -109,7 +104,7 @@ def model_pipeline(config=None):
         lengthscale = model.base_model.kernel.lengthscale_unconstrained.data
         variance = model.base_model.kernel.variance_unconstrained.data
         with torch.no_grad():
-            torch.clamp_(lengthscale, min=0.1)
+            torch.clamp_(lengthscale, min=0.01)
             torch.clamp_(variance, min=0.01)
 
         max_grad = max([p.grad.abs().max() for p in model.parameters()])
@@ -120,13 +115,6 @@ def model_pipeline(config=None):
                 ),
                 end="\r",
             )
-
-        # if iter % 1000 == 0:
-        # table = wandb.Table(data=model.X.data.numpy(), columns=["xp", "yp"])
-        # wandb.log({"X": wandb.plot.scatter(table, "xp", "yp", title="Latent space predicted")})
-        # elif loss < -0.1:
-        #     break
-
         wandb.log({"loss": loss, "grad": max_grad, "lengthscale": lengthscale, "variance": variance})
 
     # save model
@@ -137,15 +125,11 @@ def model_pipeline(config=None):
     model = pickle_load(folderpath, incr_filename)
 
     # test model
-    acc_obs, dist, comb_metrics = test(model, X_true)
+    acc_obs, dist = test(model, X_true)
 
-    wandb.log({"pts_on_sphere": acc_obs, "diff_latent": dist, "comb": comb_metrics})
+    wandb.log({"pts_on_sphere": acc_obs, "diff_latent": dist})
     table = wandb.Table(data=model.X.data.numpy(), columns=["xp", "yp"])
-
-    wandb.log({"latent space predicted": wandb.plot.scatter(table, "xp", "yp", title="Latent space predicted")})
-
-    table = wandb.Table(data=X_true, columns=["xt", "yt"])
-    wandb.log({"latent space true": wandb.plot.scatter(table, "xt", "yt", title="Latent space true")})
+    wandb.log({"latent space": wandb.plot.scatter(table, "xp", "yp", title="Latent space")})
 
     print("number of points on sphere:", acc_obs)
     print("distance between true and trained latent points:", dist)
@@ -166,7 +150,7 @@ if __name__ == "__main__":
         # sweep config parameters
         sweep_dict = {
             "lr": {"values": [1e-2, 1e-3]},
-            "iter": {"values": [30000, 40000]},
+            "iter": {"distribution": "uniform", "min": 10000, "max": 20000},
             "kernel": {"values": ["Matern32"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
@@ -176,7 +160,7 @@ if __name__ == "__main__":
         sweep_config = {
             "method": "random",
             "name": "sweep",
-            "metric": {"name": "comb", "goal": "minimize"},
+            "metric": {"name": "acc_obs", "goal": "minimize"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
@@ -186,11 +170,11 @@ if __name__ == "__main__":
         print("--- single run mode ---")
         # best params
         config_params = {
-            "lr": 1e-4,
-            "iter": 20000,
+            "lr": 1e-3,
+            "iter": 17000,
             "kernel": "RBF",
-            "lengthscale": 0.3,
-            "variance": 1.0,
+            "lengthscale": 0.24,
+            "variance": 0.95,
             "noise": 1e-4,
         }
         model_pipeline(config=config_params)
