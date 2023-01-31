@@ -26,25 +26,25 @@ requirements: test_environment
 	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
 
 ## Train model
-train: requirements
+train:
 	$(PYTHON_INTERPRETER) src/models/train.py
 
 ## Make figure3
-figure3: requirements
+figure3:
 	$(PYTHON_INTERPRETER) src/examples/latent_indicatrices.py --num_geod 0
 	$(PYTHON_INTERPRETER) src/examples/latent_indicatrices.py --num_geod 1
 
 ## Make figure4
-figure4: requirements
+figure4:
 	$(PYTHON_INTERPRETER) src/examples/latent_heatmaps.py
 
 ## Make figure5
-figure5: requirements
+figure5:
 	$(PYTHON_INTERPRETER) src/examples/high_dimensions.py
 	$(PYTHON_INTERPRETER) src/examples/bound_comparison.py
 
 ## Make figure7
-figure7: requirements
+figure7:
 	$(PYTHON_INTERPRETER) src/examples/fontdata.py
 	$(PYTHON_INTERPRETER) src/examples/qPCR.py
 
