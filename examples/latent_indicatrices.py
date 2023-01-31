@@ -30,7 +30,7 @@ def get_args():
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--model_folder", default="models/starfish/", type=str)
     parser.add_argument("--exp_folder", default="plots/latent_indicatrices/", type=str)
-    parser.add_argument("--model_title", default="model", type=str)  # number of the experiment to use for plotting
+    parser.add_argument("--model_title", default="model", type=str)
     opts = parser.parse_args()
     return opts
 

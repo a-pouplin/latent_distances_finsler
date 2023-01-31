@@ -15,13 +15,11 @@ matplotlib.rcParams["svg.fonttype"] = "none"
 
 def get_args():
     parser = argparse.ArgumentParser()
-    # data used
-    parser.add_argument("--data", default="starfish", type=str)  # sphere or qPCR or font or starfish
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--model_folder", default="trained_models/", type=str)
+    parser.add_argument("--model_folder", default="models/starfish/", type=str)
     parser.add_argument("--exp_folder", default="plots/latent_heatmaps/", type=str)
-    parser.add_argument("--exp_num", default="17", type=str)  # number of the experiment to use for plotting
+    parser.add_argument("--model_title", default="model", type=str)  # number of the experiment to use for plotting
     opts = parser.parse_args()
     return opts
 
@@ -31,14 +29,12 @@ if __name__ == "__main__":
     opts = get_args()
     print("options: {}".format(opts))
 
-    folderpath = os.path.abspath(str(opts.exp_folder) + "/" + str(opts.data) + "/" + str(opts.exp_num))
+    folderpath = os.path.abspath(str(opts.exp_folder) + "/" + str(opts.model_title))
     create_folder(folderpath)
     print("--- figures saved in:", folderpath)
 
     # load previously training gplvm model
-    model_folder = os.path.join(opts.model_folder, opts.data)
-    model_saved = pickle_load(folder_path=model_folder, file_name="model_{}.pkl".format(opts.exp_num))
-    model = model_saved["model"]
+    model = pickle_load(folder_path=f"{opts.model_folder}", file_name=f"{opts.model_title}.pkl")
     Y = model.y.data.numpy().transpose()
     X = model.X.data.numpy()
     lengthscale = model.kernel.lengthscale_unconstrained.data
