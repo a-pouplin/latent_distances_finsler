@@ -166,8 +166,8 @@ if __name__ == "__main__":
         # sweep config parameters
         sweep_dict = {
             "lr": {"distribution": "log_uniform", "min": -6, "max": -4},
-            "iter": {"values": [10000, 15000, 20000]},
-            "kernel": {"values": ["RBF", "Matern32", "Matern52", "Periodic"]},
+            "iter": {"values": [10000]},
+            "kernel": {"values": ["Matern32"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
             "noise": {"values": [1e-4]},
@@ -176,11 +176,11 @@ if __name__ == "__main__":
         sweep_config = {
             "method": "random",
             "name": "sweep",
-            "metric": {"name": "comb", "goal": "minimise"},
+            "metric": {"name": "comb", "goal": "minimize"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep_periodic2")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep3")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
         print("--- single run mode ---")

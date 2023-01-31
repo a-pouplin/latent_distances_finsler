@@ -46,7 +46,8 @@ def on_sphere(x):
     return num_onsphere / num_total
 
 
-def make_pinwheel_data(num_classes, num_per_class, radial_std=0.5, tangential_std=0.1, rate=0.1):
+# 0.5, 0.1, 0.1
+def make_pinwheel_data(num_classes, num_per_class, radial_std=0.4, tangential_std=0.02, rate=0.1):
     np.random.seed(seed=42)
     rads = np.linspace(0, 2 * np.pi, num_classes, endpoint=False)
     features = np.random.randn(num_classes * num_per_class, 2) * np.array([radial_std, tangential_std])
@@ -100,3 +101,11 @@ def starfish_2sphere(num_classes=5, num_per_class=200):
 
     obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
     return obs_data, latent_data
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    X = make_pinwheel_data(num_classes=5, num_per_class=200, radial_std=0.4, tangential_std=0.02, rate=0.1)
+    plt.scatter(X[:, 0], X[:, 1])
+    plt.show()
