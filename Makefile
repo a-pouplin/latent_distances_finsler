@@ -27,26 +27,26 @@ requirements: test_environment
 
 ## Train model
 train:
-	$(PYTHON_INTERPRETER) src/models/train.py
+	$(PYTHON_INTERPRETER) models/train.py
 
 ## Make figure3
 figure3:
-	$(PYTHON_INTERPRETER) src/examples/latent_indicatrices.py --num_geod 0
-	$(PYTHON_INTERPRETER) src/examples/latent_indicatrices.py --num_geod 1
+	$(PYTHON_INTERPRETER) examples/latent_indicatrices.py --num_geod 0
+	$(PYTHON_INTERPRETER) examples/latent_indicatrices.py --num_geod 1
 
 ## Make figure4
 figure4:
-	$(PYTHON_INTERPRETER) src/examples/latent_heatmaps.py
+	$(PYTHON_INTERPRETER) examples/latent_heatmaps.py
 
 ## Make figure5
 figure5:
-	$(PYTHON_INTERPRETER) src/examples/high_dimensions.py
-	$(PYTHON_INTERPRETER) src/examples/bound_comparison.py
+	$(PYTHON_INTERPRETER) examples/high_dimensions.py
+	$(PYTHON_INTERPRETER) examples/bound_comparison.py
 
 ## Make figure7
 figure7:
-	$(PYTHON_INTERPRETER) src/examples/fontdata.py
-	$(PYTHON_INTERPRETER) src/examples/qPCR.py
+	$(PYTHON_INTERPRETER) examples/fontdata.py
+	$(PYTHON_INTERPRETER) examples/qPCR.py
 
 ## Delete all compiled Python files
 clean:
