@@ -13,7 +13,7 @@ from finsler.visualisation.indicatrices import PolyArea, contour_bounds
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outDir", default="plots/indicatrices/comparison", type=str)
+    parser.add_argument("--outDir", default="plots/bound_comparison", type=str)
     parser.add_argument("--seed", default=7, type=int)
     opts = parser.parse_args()
     return opts
@@ -219,13 +219,11 @@ if __name__ == "__main__":
     print("--- figures saved in:", folderpath)
 
     for opts.seed in range(5):
-        np.random.seed(opts.seed)  # 12 #31
+        np.random.seed(opts.seed)
         mean = psd_matrix(1e-6 + np.random.rand(2))
-        # mean = np.empty((2,2))
         cov = psd_matrix(1e-6 + np.random.rand(2))
 
         tensor = Tensor()
-        # riemann = tensor.riemann(cov, mean, 3)
         lower = tensor.lower(cov, 3)
         alpha = automated_scaling(lower)
 
@@ -241,7 +239,6 @@ if __name__ == "__main__":
             riemann_indicatrix,
             lower_indicatrix,
             folderpath,
-            # title="mean: {}, cov: {}".format(mean, cov),
             name="indicatrix_{}".format(opts.seed),
             legend=True,
         )

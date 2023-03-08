@@ -1,5 +1,3 @@
-from math import isnan
-
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -9,68 +7,20 @@ from matplotlib.path import Path
 from scipy.interpolate import griddata
 
 from finsler.distributions import NonCentralNakagami
-from finsler.utils.helper import PolyArea, automated_scaling
 
 
-def indicatrices_old(model, points, mode="riemann"):
-    """Draw the indicatrix of functions using a range of vectors.
-    ---
-    inputs: - cov: qxq covariance matrix, with cov = var[J]
-            - mean: qxq matrix, with mean = E[J].T@E[J]
-            - points: points for which we want to plot the indicatrix
-            - scale: reduce the size of the indicatrix for visualisation purposes
-    """
+def automated_scaling(metric):
+    """scale the vector to compute the indicatrix"""
+    if torch.is_tensor(metric):
+        metric = torch.squeeze(metric).detach().numpy()
+    eigvalues, _ = np.linalg.eig(metric)
+    vec_size = 64
+    return 1 / np.sqrt(np.min(eigvalues)), vec_size
 
-    # vectors = torch.tensor(vectors, dtype=torch.float32)
-    # mus, vars = torch.squeeze(mus.to(torch.float32)), torch.squeeze(vars.to(torch.float32))
-    mus, vars = model.jacobian_posterior(points)
-    mus, vars = mus, vars
-    n_of_points, D = mus.size(0), mus.size(2)
-    paths, remove_index = [], []
-    vector_values = torch.empty((n_of_points))
 
-    for nn in range(n_of_points):
-        metric = mus[nn].mm(mus[nn].T) + D * vars[nn]
-        alpha, vec_size = automated_scaling(metric)
-        coeff = 1.5
-        vectors = torch.linspace(-coeff * alpha, coeff * alpha, vec_size)
-        vector_values[nn] = (2 * coeff * alpha) ** 2
-        indicatrix = torch.empty((vec_size, vec_size))
-
-        for i1, y1 in enumerate(vectors):
-            for i2, y2 in enumerate(vectors):
-                y = torch.unsqueeze(torch.tensor([y1, y2]), 0)  # random vectors
-                var_x = y.mm(vars[nn]).mm(y.T)
-                mu_x = y.mm(mus[nn]).mm(mus[nn].T).mm(y.T)
-
-                if mode == "riemann":
-                    indicatrix[i1, i2] = mu_x + D * var_x
-                elif mode == "finsler":
-                    nakagami = NonCentralNakagami(mu_x, var_x)
-                    indicatrix[i1, i2] = nakagami.expectation()
-
-        figc, axc = plt.subplots(1, 1)
-
-        cs = axc.contour(indicatrix.detach().numpy(), (1.0,))
-        plt.close(figc)
-        sgm = cs.collections[0].get_segments()[0]
-
-        eps = 1e-2
-        if (
-            (abs(sgm[0, 0] - sgm[-1, 0]) < eps)
-            and (abs(sgm[0, 1] - sgm[-1, 1]) < eps)
-            and len(cs.collections[0].get_segments()) == 1
-        ):
-            pp = cs.collections[0].get_paths()[0].vertices / (vec_size) - [0.5, 0.5] + points[nn].detach().numpy()
-            codes = Path.CURVE3 * np.ones(len(pp), dtype=Path.code_type)
-            codes[0] = codes[-1] = Path.MOVETO
-            path = Path(pp, codes)
-            paths.append(path)
-        else:
-            print("issue with points {}, contour broken".format(nn))
-            remove_index.append(nn)
-            paths.append(np.nan)
-    return paths, points, vector_values
+def PolyArea(vertices):
+    x, y = vertices[:, 0], vertices[:, 1]
+    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 
 def indicatrices(model, points, mode="riemann"):
@@ -189,10 +139,13 @@ def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None
             patch = PathPatch(path, linewidth=1, edgecolor="tab:orange", fill=False)
             ax.add_patch(patch)
 
+    max_norm = 2 * np.max(np.linalg.norm(X, axis=-1))
     im = ax.imshow(
         grid,
         # extent=(Xmin[0], Xmax[0], Xmin[1], Xmax[1]),
+        # extent = (-max_norm, max_norm, -max_norm, max_norm),
         extent=(-4, 4, -4, 4),
+        # extent=(-6, 6, -6, 6),
         origin="lower",
         cmap=cmap_sns,
         aspect="auto",

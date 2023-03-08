@@ -10,7 +10,7 @@ import torch
 from stochman.curves import CubicSpline
 from stochman.geodesic import geodesic_minimizing_energy
 
-from finsler.gplvm import gplvm
+from finsler.gplvm import Gplvm
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
 from finsler.visualisation.latent import volume_heatmap
 
@@ -24,9 +24,9 @@ def get_args():
     parser.add_argument("--data", default="font", type=str)
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--model_folder", default="trained_models/", type=str)
+    parser.add_argument("--model_folder", default="models/font/", type=str)
     parser.add_argument("--exp_folder", default="plots/fontdata/", type=str)
-    parser.add_argument("--title_model", default="1_f", type=str)
+    parser.add_argument("--model_title", default="model_1_f", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -41,16 +41,14 @@ if __name__ == "__main__":
     print("--- figures saved in:", folderpath)
 
     # load previously training gplvm model
-    model_folder = os.path.join(opts.model_folder, opts.data)
-    model_saved = pickle_load(folder_path=model_folder, file_name="model{}.pkl".format(opts.title_model))
-    model = model_saved["model"]
-    Y = model_saved["Y"]
-    X = model_saved["X"]
+    model_saved = pickle_load(folder_path=f"{opts.model_folder}", file_name=f"{opts.model_title}.pkl")
+    model = model_saved["model"].base_model
+    Y = model.y.data.numpy().transpose()
+    X = model.X.data.numpy()
 
     # get Riemannian and Finslerian metric
-    gplvm_riemann = gplvm(model, mode="riemannian")
-    gplvm_finsler = gplvm(model, mode="finslerian")
-    X = model.X_loc.detach().numpy()
+    gplvm_riemann = Gplvm(model, mode="riemannian")
+    gplvm_finsler = Gplvm(model, mode="finslerian")
 
     # Energy function computed with riemannian metric
     optimizer = torch.optim.LBFGS
@@ -100,7 +98,7 @@ if __name__ == "__main__":
     plt.title("Geodesic in the latent space")
     plt.show()
 
-    filename = "latent" + "_" + opts.title_model + ".png"
+    filename = "latent" + "_" + opts.model_title + ".png"
     filepath = create_filepath(folderpath, filename)
     fig.savefig(filepath, dpi=fig.dpi)
     print("--- plot of the latent space saved as: {}".format(filepath))
@@ -109,34 +107,23 @@ if __name__ == "__main__":
     fig = plt.figure(2)
     num_cols, num_rows = 12, opts.num_geod
     gs = fig.add_gridspec(num_rows, num_cols, hspace=0, wspace=0)  # 10 images along num_geod geodesics
-
-    if opts.title_model == "_1_g":
-        letters = c_obs_riemann.reshape((num_rows, eval_grid, 6, -1))
-    else:
-        letters = c_obs_riemann.reshape((num_rows, eval_grid, 4, -1))
+    letters = c_obs_riemann.reshape((num_rows, eval_grid, 4, -1))
 
     pts_sampling = int(eval_grid / num_cols) - 1
-    print(letters.shape)
     letters = letters[:, ::pts_sampling, :, :]
-    print(letters.shape)
     letters = letters[:, :num_cols, :, :]
 
     axes = gs.subplots(sharex="col", sharey="row")
     for row in range(num_rows):
         for col in range(num_cols):
-            if opts.title_model == "_1_g":
-                axes[row, col].plot(letters[row, col, 0, :], letters[row, col, 3, :], color=colors[row])
-                axes[row, col].plot(letters[row, col, 1, :], letters[row, col, 4, :], color=colors[row])
-                axes[row, col].plot(letters[row, col, 2, :], letters[row, col, 5, :], color=colors[row])
-            else:
-                axes[row, col].plot(letters[row, col, 0, :], letters[row, col, 2, :], color=colors[row])
-                axes[row, col].plot(letters[row, col, 1, :], letters[row, col, 3, :], color=colors[row])
+            axes[row, col].plot(letters[row, col, 0, :], letters[row, col, 2, :], color=colors[row])
+            axes[row, col].plot(letters[row, col, 1, :], letters[row, col, 3, :], color=colors[row])
             axes[row, col].tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
             axes[row, col].set_aspect("equal")
             axes[row, col].axis("off")
     plt.show()
 
-    filename = "observational" + "_" + opts.title_model + ".png"
+    filename = "observational" + "_" + opts.model_title + ".png"
     filepath = create_filepath(folderpath, filename)
     fig.savefig(filepath, dpi=fig.dpi)
     print("--- plot of the observational space saved as: {}".format(filepath))

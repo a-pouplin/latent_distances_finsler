@@ -142,5 +142,6 @@ dmypy.json
 
 # folder to be ignored
 plots/
-tests/
 trained_models/
+# models/
+wandb/

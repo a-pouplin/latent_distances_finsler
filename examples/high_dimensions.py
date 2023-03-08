@@ -5,7 +5,7 @@ from logging import raiseExceptions
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples.indicatrices import Indicatrices, Tensor, Volume, automated_scaling
+from examples.bound_comparison import Indicatrices, Tensor, Volume, automated_scaling
 from finsler.utils.helper import create_folder
 from finsler.visualisation.indicatrices import contour_high_dim, contour_test
 
@@ -52,7 +52,6 @@ def test_simulation(D=5):
         finsler_expl,
         riemann_expl,
         opts.outDir,
-        # title="mean: {}, cov: {}".format(mean, cov),
         name="check",
     )
 
@@ -96,12 +95,9 @@ if __name__ == "__main__":
     create_folder(folderpath)
     print("--- figures saved in:", folderpath)
 
-    dims = [3, 5, 10, 50]
-    seeds = range(4, 8)
-
     # # for more data points (relevant for plotting the relative volume ratio w/ dims)
-    # dims = np.geomspace(3,100,10).astype(int)
-    # seeds = range(4,16)
+    dims = np.geomspace(3, 100, 10).astype(int)
+    seeds = range(4, 16)
 
     finsler_indicatrices = np.empty((len(dims), 64, 64))
     riemann_indicatrices = np.empty((len(dims), 64, 64))
@@ -116,7 +112,6 @@ if __name__ == "__main__":
         np.random.seed(opts.seed)
         # simulate central gaussian and central wishart
         scale = np.random.uniform(low=0.0, high=10, size=1)
-        # loc = np.random.uniform(low=-10, high=10, size=1)
         loc = np.sqrt(scale)
         print("loc {}, scale {}".format(loc, scale))
         ncgauss = np.random.normal(loc, scale, size)
@@ -138,15 +133,15 @@ if __name__ == "__main__":
             finsler_volumes[ids, idd] = volume.hausdorff(finsler_indicatrices[idd], vectors)
             riemann_volumes[ids, idd] = volume.hausdorff(riemann_indicatrices[idd], vectors)
 
-        contour_high_dim(
-            finslers=finsler_indicatrices,
-            riemanns=riemann_indicatrices,
-            dims=dims,
-            out_dir=opts.outDir,
-            # title="mean: {}, cov: {}".format(mean, cov),
-            name="highdim_{}".format(opts.seed),
-        )
-        print("highdim_{} was saved!".format(opts.seed))
+    contour_high_dim(
+        finslers=finsler_indicatrices,
+        riemanns=riemann_indicatrices,
+        dims=[3, 5, 10, 50],
+        out_dir=opts.outDir,
+        # title="mean: {}, cov: {}".format(mean, cov),
+        name="highdim_{}".format(opts.seed),
+    )
+    print("highdim_{} was saved!".format(opts.seed))
 
     vols = ((riemann_volumes - finsler_volumes) / riemann_volumes).transpose()
     plot_volume_relative(dims, vols, title="volumeratio")

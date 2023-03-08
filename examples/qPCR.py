@@ -11,7 +11,7 @@ import torch
 from stochman.curves import CubicSpline
 from stochman.geodesic import geodesic_minimizing_energy
 
-from finsler.gplvm import gplvm
+from finsler.gplvm import Gplvm
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
 from finsler.visualisation.latent import volume_heatmap
 
@@ -25,8 +25,9 @@ def get_args():
     parser.add_argument("--data", default="qPCR", type=str)
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--model_folder", default="trained_models/", type=str)
+    parser.add_argument("--model_folder", default="models/qPCR/", type=str)
     parser.add_argument("--exp_folder", default="plots/qPCR/", type=str)
+    parser.add_argument("--model_title", default="model", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -44,16 +45,14 @@ if __name__ == "__main__":
     df = pd.read_csv(URL, index_col=0)
 
     # load previously training gplvm model
-    model_folder = os.path.join(opts.model_folder, opts.data)
-    model_saved = pickle_load(folder_path=model_folder, file_name="model.pkl")
-    model = model_saved["model"]
-    Y = model_saved["Y"]
-    X = model_saved["X"]
+    model_saved = pickle_load(folder_path=f"{opts.model_folder}", file_name=f"{opts.model_title}.pkl")
+    model = model_saved["model"].base_model
+    Y = model.y.data.numpy().transpose()
+    X = model.X.data.numpy()
 
     # get Riemannian and Finslerian metric
-    gplvm_riemann = gplvm(model, mode="riemannian")
-    gplvm_finsler = gplvm(model, mode="finslerian")
-    X = model.X_loc.detach().numpy()
+    gplvm_riemann = Gplvm(model, mode="riemannian")
+    gplvm_finsler = Gplvm(model, mode="finslerian")
 
     # Energy function computed with riemannian metric
     optimizer = torch.optim.LBFGS
