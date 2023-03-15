@@ -18,6 +18,8 @@ class Gplvm(Manifold):
 
     def pairwise_distances(self, x, y=None):
         """
+        Compute the pairwise distance matrix between two collections of vectors.
+        Only used for the RBF option of `evaluateDiffKernel`.
         Input: x is a Nxd matrix
                y is an optional Mxd matirx
         Output: dist is a NxM matrix where dist[i,j] is the square norm between x[i,:] and y[j,:]
@@ -35,18 +37,6 @@ class Gplvm(Manifold):
         dist = x_norm + y_norm - 2.0 * torch.mm(x, y_t)
         return torch.clamp(dist, 0.0, np.inf)
 
-    def evaluateKernel(self, xstar, x):
-        """
-        For the RBF kernel, evaluate the kernel using the pairwise distances
-        Returns the evaluated kernel of the latent variables and the new point
-        """
-        radius = self.pairwise_distances(xstar, x)
-        var = self.model.kernel.variance_unconstrained.exp()
-        length = self.model.kernel.lengthscale_unconstrained.exp()
-
-        ksx = var * torch.exp((-0.5 * radius / length**2))
-        return ksx
-
     def evaluateDiffKernel(self, xstar, X, kernel_type=None):
         """
         Compute the differentiation of the kernel.
@@ -60,9 +50,10 @@ class Gplvm(Manifold):
         """
         N_train, d = X.shape
         if kernel_type == "rbf":  # faster for RBF
+            radius = self.pairwise_distances(xstar, X)
             var = self.model.kernel.variance_unconstrained.exp()
             length = self.model.kernel.lengthscale_unconstrained.exp()
-            ksx = self.evaluateKernel(xstar, X)
+            ksx = var * torch.exp((-0.5 * radius / length**2))
             dK = -(length**-2) * (xstar - X).T * ksx
             ddK = (length**-2 * var) * torch.eye(d).to(torch.float64)
         else:
@@ -73,7 +64,8 @@ class Gplvm(Manifold):
         return dK, ddK
 
     def embed(self, xstar, full_cov=True):
-        loc, cov = self.model.forward(torch.squeeze(xstar).float(), full_cov=full_cov, noiseless=False)
+        loc, cov = self.model.forward(xstar, full_cov=full_cov)
+        # loc, cov = self.model.forward(torch.squeeze(xstar).float(), full_cov=full_cov)
         return loc.T, cov[0]  # dims: D x Nstar, Nstar x Nstar
 
     def derivatives(self, coords, method="discretization"):
@@ -89,7 +81,7 @@ class Gplvm(Manifold):
             - mu_derivatives: expectation (matrix, size: (N_test-1)*D)
         """
         X = self.model.X
-        Y = self.model.y.data.numpy()
+        Y = self.model.y
         # noise = self.model.noise_unconstrained.exp() ** 2
         noise = 1e-8
         D, N = Y.shape
