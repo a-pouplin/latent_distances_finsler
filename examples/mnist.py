@@ -46,21 +46,22 @@ def get_args():
     parser.add_argument("--model_folder", default="models/sas/mnist", type=str)
     parser.add_argument("--model_title", default="mnist", type=str)
     parser.add_argument("--mode", default="riemannian", type=str)  # finslerian or riemannian
-    parser.add_argument("--save_model", default=True, type=str)
+    parser.add_argument("--save_model", default=False, type=str)
     parser.add_argument("--num_geod", default=5, type=int)
-    parser.add_argument("--res", default=32, type=int)  # resolution for the manifold grid
+    parser.add_argument("--res", default=16, type=int)  # resolution for the manifold grid
+    parser.add_argument("--num_train", default=5000, type=int)
     opts = parser.parse_args()
     return opts
 
 
-def load_data():
+def load_data(num_train):
     ## MNIST // TRAIN=60.000, TEST=10.000
     transform = transforms.ToTensor()
     trainset = MNIST(root="./data/", train=True, download=True, transform=transform)
     # testset = MNIST(root='./data/', train=False, download=True, transform=transform)
 
     # get a subset of the data
-    trainset = torch.utils.data.Subset(trainset, range(5000))  # use 5000
+    trainset = torch.utils.data.Subset(trainset, range(num_train))  # use 5000
     # testset = torch.utils.data.Subset(trainset, range(500))
 
     # Create a data loader for the subset
@@ -102,29 +103,42 @@ def load_model(model_folder, model_title):
     return model
 
 
+def random_centered_points(center, radius, num_points):
+    # generate random points inside a ball centered in {center} of radius {radius}
+    # https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
+    points = np.random.rand(num_points, len(center))
+    points = points / np.linalg.norm(points, axis=1)[:, None]
+    points = points * np.random.rand(num_points, 1) ** (1 / len(center))
+    points = points * radius + center
+    return torch.Tensor(points)
+
+
 if __name__ == "__main__":
 
     opts = get_args()
-    modelpath = os.path.join(opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_{opts.mode}.pkl")
+    modelpath = os.path.join(
+        opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_{opts.mode}.pkl"
+    )
     print("everything will be saved in:", modelpath)
 
     # load data
-    data_tensor, label_tensor = load_data()
+    data_tensor, label_tensor = load_data(opts.num_train)
 
     # load model
     model = load_model(opts.model_folder, opts.model_title)
 
     # add data to model:
     model.y = torch.squeeze(data_tensor.data).reshape(-1, 784).float().detach()  # data in observed space (5000x784)
-    model.ylabels = label_tensor.detach()  # labels for data (5000,)
+    model.ylabels = label_tensor.detach()  # labels for data (num_train , )
     model.X = model.amortization_net(model.y).detach()
-    data_latent = model.X  # data in latent space (5000x2)
+    data_latent = model.X  # data in latent space (num_train x 2)
     model.Kinv = torch.cholesky_inverse(
         model.kernel.K(data_latent, data_latent)
-    ).detach()  # inverse of kernel matrix (5000x5000)
+    ).detach()  # inverse of kernel matrix (num_train x num_train )
+    print("Kinverse computed, shape: ", model.Kinv.shape)
 
     # for printing
-    num_data, _ = data_latent.shape  # 5000x2
+    num_data, _ = data_latent.shape  # num_train x 2
     print("Data loaded, shape: ", model.y.shape, " and latent space shape: ", model.X.shape)
 
     # models wrapped with gplvm code to compute geodesics with stochman
@@ -151,8 +165,10 @@ if __name__ == "__main__":
 
     # start and end points for geodesics
     torch.manual_seed(15)  # fix seed for reproducibility
-    p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    p0 = random_centered_points(center=[-0.3, -0.3], radius=0.2, num_points=opts.num_geod)
+    p1 = random_centered_points(center=[0.4, 0], radius=0.2, num_points=opts.num_geod)
 
     spline_manifold, _ = manifold.connecting_geodesic(p0, p1)
     t = torch.linspace(0, 1, 100)
@@ -175,6 +191,7 @@ if __name__ == "__main__":
         for j in range(num_images):
             axs1[i, j].imshow(y_img_manifold[i, j], cmap="Greys", interpolation="nearest")
             axs1[i, j].axis("off")
+    fig1.title("Geodesics on a Riemannian manifold")
     fig1.savefig(opts.model_folder + "/images_mnist_{}.png".format(opts.mode))
 
     fig2, axs2 = plt.subplots(opts.num_geod, num_images, figsize=(num_images, opts.num_geod))
@@ -182,6 +199,8 @@ if __name__ == "__main__":
         for j in range(num_images):
             axs2[i, j].imshow(y_img_euclidean[i, j], cmap="Greys", interpolation="nearest")
             axs2[i, j].axis("off")
+    # add title
+    fig2.title("Geodesics on an euclidean manifold")
     fig2.savefig(opts.model_folder + "/images_mnist_euclidean.png")
 
     # # plot manifold and geodesics in latent space with labelled legend
