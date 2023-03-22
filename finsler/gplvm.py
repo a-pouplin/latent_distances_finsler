@@ -1,10 +1,13 @@
 import numpy as np
 import torch
+from pyro.contrib.gp.models import SparseGPRegression
 from stochman.curves import CubicSpline
 from stochman.manifold import Manifold
 from torch.autograd import functional
 
 from finsler.distributions import NonCentralNakagami
+from finsler.kernels.rbf import RBF
+from finsler.sasgp import SASGP
 
 
 class Gplvm(Manifold):
@@ -19,7 +22,6 @@ class Gplvm(Manifold):
     def pairwise_distances(self, x, y=None):
         """
         Compute the pairwise distance matrix between two collections of vectors.
-        Only used for the RBF option of `evaluateDiffKernel`.
         Input: x is a Nxd matrix
                y is an optional Mxd matirx
         Output: dist is a NxM matrix where dist[i,j] is the square norm between x[i,:] and y[j,:]
@@ -64,9 +66,49 @@ class Gplvm(Manifold):
         return dK, ddK
 
     def embed(self, xstar, full_cov=True):
-        loc, cov = self.model.forward(xstar, full_cov=full_cov)
+        if isinstance(self.model, SparseGPRegression):  # work with a pyro module
+            loc, cov = self.model.forward(xstar, full_cov=full_cov)
+        elif isinstance(self.model, SASGP):  # work with a SAS module
+            loc, cov = self.embed_sas(xstar)
         # loc, cov = self.model.forward(torch.squeeze(xstar).float(), full_cov=full_cov)
-        return loc.T, cov[0]  # dims: D x Nstar, Nstar x Nstar
+        return loc, cov  # dims: D x Nstar, Nstar x Nstar
+
+    def embed_sas(self, xstar):
+        # Maps from latent to data space, implements equations 2.23 - 2.24 from Rasmussen.
+        assert isinstance(self.model.kernel, RBF), "embed only works with SASGP model"
+        assert hasattr(self.model, "Kinv"), "Kinv does not exist"  # assert that Kinv exists
+
+        # add batch dimension
+        if xstar.dim() == 2:
+            xstar = xstar.unsqueeze(0)
+        X = torch.unsqueeze(self.model.X, 0)
+        Y = torch.unsqueeze(self.model.y, 0)
+
+        # shapes
+        (bs, num_data, _) = xstar.shape  # (batch size, number of data points, latent dim == 2))
+        obs_dim = Y.shape[-1]  # observational dimension (= 784 if MNIST)
+
+        Ksx = self.model.kernel.K(xstar, X)
+        Kss = self.model.kernel.K(xstar, xstar)
+        Kinv = self.model.Kinv  # hard coded for now
+
+        # check shapes and ensure batch computations
+        assert Kinv.dim() == 3, "Kinv should be a 3D tensor"
+        assert Kss.dim() == 3, "Kss should be a 3D tensor"
+        assert Ksx.dim() == 3, "Ksx should be a 3D tensor"
+        Kinv = Kinv.repeat(bs, 1, 1)  # repeat Kinv for each batch
+        Y = Y.repeat(bs, 1, 1)  # repeat Kss for each batch
+
+        mu = torch.bmm(Ksx, torch.bmm(Kinv, Y))  # shape: (batch size, number of test points)
+        Sigma = Kss - torch.bmm(
+            Ksx, torch.bmm(Kinv, Ksx.transpose(-2, -1))
+        )  # shape: (batch size, number of test points, number of test points)
+
+        # check shapes
+        assert mu.shape == (bs, num_data, obs_dim), "mu has wrong shape"
+        assert Sigma.shape == (bs, num_data, num_data), "Sigma has wrong shape"
+        L = torch.linalg.cholesky_ex(Sigma)  # test if Sigma is positive definite
+        return mu, Sigma
 
     def derivatives(self, coords, method="discretization"):
         """
@@ -157,6 +199,56 @@ class Gplvm(Manifold):
         print("{} energy: {:.4f} \r".format(self.mode, energy.detach().numpy()), end="\r")
         return energy
 
+    def compute_derivatives_batch(self, curve: CubicSpline):
+        """
+        Computes the derivatives of the curve
+        :param curve: (bs, num_data, dim_data)
+        :return: (bs, num_data - 1, dim_data), (bs, num_data - 1)
+        """
+        assert curve.shape[1] >= 2, "Curves must have at least 2 points"
+        loc, cov = self.embed(curve)  # loc (bs, num_data, dim_data), cov (bs, num_data, dim_data, dim_data)
+
+        # Compute derivatives by discretising the curve step by step
+        loc_der = loc[:, 1:, :] - loc[:, 0:-1, :]  # (bs, num_data - 1, dim_data)
+        cov_nondiag_ = torch.diagonal(cov, offset=1, dim1=1, dim2=2)  # Upper diagonal of cov (bs, num_data - 1)
+        cov_diag_ = torch.diagonal(cov, offset=0, dim1=1, dim2=2)  # diagonal of cov (bs, num_data - 1)
+        cov_der = cov_diag_[:, 1:] + cov_diag_[:, 0:-1] - 2 * cov_nondiag_  # (bs, num_data - 1)
+
+        # warnings if wrong shapes
+        assert loc_der.shape == (
+            curve.shape[0],
+            curve.shape[1] - 1,
+            loc.shape[-1],
+        ), "local derivative shape: {}, expected {}".format(
+            loc_der.shape, (curve.shape[0], curve.shape[1] - 1, loc.shape[-1])
+        )
+        assert cov_der.shape == (
+            curve.shape[0],
+            curve.shape[1] - 1,
+        ), "covariant derivative shape: {}, expected {}".format(cov_der.shape, (curve.shape[0], curve.shape[1] - 1))
+        return loc_der, cov_der
+
+    def curve_energy_batch(self, coords: CubicSpline):
+        """
+        Computes the energy of the curve with batched computation
+        :param coords: (bs, num_data, dim_data)
+        :param mode: "riemannian" or "finslerian"
+        :return: (bs)
+        """
+        loc_der, cov_der = self.compute_derivatives_batch(coords)  # (bs, num_data - 1, dim_data), (bs, num_data - 1)
+        data_dim = self.model.y.shape[-1]  # observed data dimensions. For example, 784 for MNIST
+
+        if self.mode == "riemannian":
+            energy = (loc_der**2).sum(dim=-1).sum(dim=-1) + data_dim * cov_der.sum(dim=-1)
+        elif self.mode == "finslerian":
+            non_central_nakagami = NonCentralNakagami(loc_der, cov_der)
+            energy = (non_central_nakagami.expectation() ** 2).sum(dim=-1)
+
+        assert energy.shape == (coords.shape[0],), "Energy shape: {}, expected {}".format(
+            energy.shape, (coords.shape[0],)
+        )
+        return energy
+
     def curve_length(self, curve: CubicSpline, dt=None):
         """
         Compute the discrete length of a given curve.
@@ -175,17 +267,17 @@ class Gplvm(Manifold):
             manifolds this can be done more efficiently, in which case it
             is recommended that the default implementation is replaced.
         """
+        assert curve.shape[-1] == 2, "Should get latent dimensions: 2 but got {} instead".format(curve.shape[-1])
+
         if curve.dim() == 2:
-            curve.unsqueeze_(0)  # add batch dimension if one isn't present
+            curve = torch.unsqueeze(curve, 0)  # add batch dimension if one isn't present
         if dt is None:
             dt = 1.0  # (curve.shape[1]-1)
-        # Now curve is BxNx(d)
-        emb_curve, _ = self.embed(curve)  # BxNxD
-        emb_curve = emb_curve.unsqueeze_(0)
-        delta = emb_curve[:, 1:] - emb_curve[:, :-1]  # Bx(N-1)xD
-        speed = delta.norm(dim=2)  # Bx(N-1)
-        lengths = speed.sum(dim=1) * dt  # B
-        return lengths
+
+        # Compute derivatives by discretising the curve step by step
+        energy_batch = self.curve_energy_batch(curve)
+
+        return torch.sqrt(energy_batch)
 
     def metric(self, xstar):
         """Computes the **expected** Riemannian metric at points xstar as the metric has to be deterministic
