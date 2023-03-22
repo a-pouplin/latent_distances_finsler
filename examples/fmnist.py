@@ -33,21 +33,22 @@ def get_args():
     parser.add_argument("--model_folder", default="models/sas/fmnist", type=str)
     parser.add_argument("--model_title", default="fmnist", type=str)
     parser.add_argument("--mode", default="riemannian", type=str)  # finslerian or riemannian
-    parser.add_argument("--save_model", default=True, type=str)
+    parser.add_argument("--save_model", default=False, type=str)
     parser.add_argument("--num_geod", default=5, type=int)
     parser.add_argument("--res", default=10, type=int)  # resolution for the manifold grid
+    parser.add_argument("--num_train", default=5000, type=int)
     opts = parser.parse_args()
     return opts
 
 
-def load_data():
+def load_data(num_train):
     ## MNIST // TRAIN=60.000, TEST=10.000
     transform = transforms.ToTensor()
     trainset = FashionMNIST(root="./data/", train=True, download=True, transform=transform)
     # testset = MNIST(root='./data/', train=False, download=True, transform=transform)
 
     # get a subset of the data
-    trainset = torch.utils.data.Subset(trainset, range(5000))
+    trainset = torch.utils.data.Subset(trainset, range(num_train))
     # testset = torch.utils.data.Subset(trainset, range(500))
 
     # Create a data loader for the subset
@@ -89,14 +90,26 @@ def load_model(model_folder, model_title):
     return model
 
 
+def random_centered_points(center, radius, num_points):
+    # generate random points inside a ball centered in {center} of radius {radius}
+    # https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
+    points = torch.rand(num_points, len(center))
+    points = points / np.linalg.norm(points, axis=1)[:, None]
+    points = points * np.random.rand(num_points, 1) ** (1 / len(center))
+    points = points * radius + center
+    return points
+
+
 if __name__ == "__main__":
 
     opts = get_args()
-    modelpath = os.path.join(opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_{opts.mode}.pkl")
+    modelpath = os.path.join(
+        opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_{opts.mode}.pkl"
+    )
     print("everything will be saved in:", modelpath)
 
     # load data
-    data_tensor, label_tensor = load_data()
+    data_tensor, label_tensor = load_data(opts.num_train)
 
     # load model
     model = load_model(opts.model_folder, opts.model_title)
@@ -138,8 +151,10 @@ if __name__ == "__main__":
 
     # start and end points for geodesics
     torch.manual_seed(2)  # fix seed for reproducibility
-    p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    p0 = random_centered_points(center=[-0.4, 0.2], radius=0.2, num_points=opts.num_geod)
+    p1 = random_centered_points(center=[0.4, 0], radius=0.2, num_points=opts.num_geod)
 
     spline_manifold, _ = manifold.connecting_geodesic(p0, p1)
     t = torch.linspace(0, 1, 100)
