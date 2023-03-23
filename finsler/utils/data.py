@@ -103,9 +103,40 @@ def starfish_2sphere(num_classes=5, num_per_class=200):
     return obs_data, latent_data
 
 
+def make_cheese_data(num_holes, radius_holes, num_data):
+    # create data points uniformely distributed and remove data to shape holes in the latent space
+    np.random.seed(seed=42)
+    data = np.random.uniform(-1, 1, size=[num_data, 2])
+    center_holes = np.random.uniform(-1 + radius_holes, 1 - radius_holes, size=[num_holes, 2])
+    for i in range(num_holes):
+        data = data[np.linalg.norm(data - center_holes[i], axis=1) > radius_holes]
+    return data
+
+
+def cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=4000):
+    def projection_stereographic(x, y):
+        norm = x**2 + y**2 + 1
+        obs_x = 2 * x / norm
+        obs_y = 2 * y / norm
+        obs_z = (x**2 + y**2 - 1) / norm
+        return obs_x, obs_y, obs_z
+
+    latent_data = make_cheese_data(num_holes, radius_holes, num_data)
+    obs_x, obs_y, obs_z = projection_stereographic(latent_data[:, 0], latent_data[:, 1])
+
+    obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
+    return obs_data, latent_data
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    X = make_pinwheel_data(num_classes=5, num_per_class=200, radial_std=0.5, tangential_std=0.1, rate=0.06)
-    plt.scatter(X[:, 0], X[:, 1])
+    # X = make_pinwheel_data(num_classes=5, num_per_class=200, radial_std=0.5, tangential_std=0.1, rate=0.06)
+    Y, X = cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=4000)
+    # plt.scatter(X[:, 0], X[:, 1])
+    fig = plt.figure(2)
+    ax = plt.axes(projection="3d")
+    ax.set_box_aspect([1, 1, 1])
+    ax.scatter3D(Y[:, 0], Y[:, 1], Y[:, 2])
+    ax.set_xlim((-1, 1)), ax.set_ylim((-1, 1)), ax.set_zlim((-1, 1))
     plt.show()

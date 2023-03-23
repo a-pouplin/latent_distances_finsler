@@ -42,7 +42,8 @@ def squared_distance(x1, x2=None):
         x1 = torch.unsqueeze(x1, 0)
     if x2.dim() == 2:
         x2 = torch.unsqueeze(x2, 0)
-
+    if x2 is not None and (x1.dtype != x2.dtype):
+        x1 = x1.type(x2.dtype)
     if x1.shape[0] != x2.shape[0]:
         x2 = x2.repeat(x1.shape[0], 1, 1)  # batch size should be the same between x1 and x2
 

@@ -96,7 +96,7 @@ def volume(model, points, mode):
     return volume_hausdorff, paths, points
 
 
-def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None, with_indicatrix=False):
+def volume_heatmap(ax, model, X, mode, n_grid=10, log=True, vmin=None, vmax=None, with_indicatrix=False):
     print(end="/n")
     if with_indicatrix:
         if mode in ["variance", "vol_riemann"]:
@@ -127,6 +127,7 @@ def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None
         print("min map:{}, max map:{}".format(np.min(map), np.max(map)))
         map[map <= 1e-8] = 1e-8
 
+    map = np.squeeze(map)
     if torch.is_tensor(xx):
         xx = xx.detach().numpy()
     if log:

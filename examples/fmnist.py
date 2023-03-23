@@ -35,7 +35,7 @@ def get_args():
     parser.add_argument("--mode", default="riemannian", type=str)  # finslerian or riemannian
     parser.add_argument("--save_model", default=False, type=str)
     parser.add_argument("--num_geod", default=5, type=int)
-    parser.add_argument("--res", default=10, type=int)  # resolution for the manifold grid
+    parser.add_argument("--res", default=32, type=int)  # resolution for the manifold grid
     parser.add_argument("--num_train", default=5000, type=int)
     opts = parser.parse_args()
     return opts
@@ -93,11 +93,11 @@ def load_model(model_folder, model_title):
 def random_centered_points(center, radius, num_points):
     # generate random points inside a ball centered in {center} of radius {radius}
     # https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
-    points = torch.rand(num_points, len(center))
+    points = np.random.rand(num_points, len(center))
     points = points / np.linalg.norm(points, axis=1)[:, None]
     points = points * np.random.rand(num_points, 1) ** (1 / len(center))
     points = points * radius + center
-    return points
+    return torch.Tensor(points)
 
 
 if __name__ == "__main__":
@@ -153,8 +153,8 @@ if __name__ == "__main__":
     torch.manual_seed(2)  # fix seed for reproducibility
     # p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
     # p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    p0 = random_centered_points(center=[-0.4, 0.2], radius=0.2, num_points=opts.num_geod)
-    p1 = random_centered_points(center=[0.4, 0], radius=0.2, num_points=opts.num_geod)
+    p0 = random_centered_points(center=[-0.5, 0.0], radius=0.2, num_points=opts.num_geod)
+    p1 = random_centered_points(center=[0.5, -0.3], radius=0.2, num_points=opts.num_geod)
 
     spline_manifold, _ = manifold.connecting_geodesic(p0, p1)
     t = torch.linspace(0, 1, 100)
@@ -184,6 +184,7 @@ if __name__ == "__main__":
         for j in range(num_images):
             axs1[i, j].imshow(y_img_manifold[i, j], cmap="Greys", interpolation="nearest")
             axs1[i, j].axis("off")
+    plt.title("Geodesics on a {} manifold".format(opts.mode))
     fig1.savefig(opts.model_folder + "/images_fmnist_{}.png".format(opts.mode))
 
     fig2, axs2 = plt.subplots(opts.num_geod, num_images, figsize=(num_images, opts.num_geod))
@@ -191,6 +192,7 @@ if __name__ == "__main__":
         for j in range(num_images):
             axs2[i, j].imshow(y_img_euclidean[i, j], cmap="Greys", interpolation="nearest")
             axs2[i, j].axis("off")
+    plt.title("Geodesics on an euclidean manifold")
     fig2.savefig(opts.model_folder + "/images_fmnist_euclidean.png")
 
     # # plot manifold and geodesics in latent space

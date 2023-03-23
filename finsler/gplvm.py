@@ -51,13 +51,34 @@ class Gplvm(Manifold):
             - ddK: second derivative of the kernel (matrix, size: dxd)
         """
         N_train, d = X.shape
-        if kernel_type == "rbf":  # faster for RBF
-            radius = self.pairwise_distances(xstar, X)
-            var = self.model.kernel.variance_unconstrained.exp()
-            length = self.model.kernel.lengthscale_unconstrained.exp()
-            ksx = var * torch.exp((-0.5 * radius / length**2))
-            dK = -(length**-2) * (xstar - X).T * ksx
-            ddK = (length**-2 * var) * torch.eye(d).to(torch.float64)
+        if isinstance(self.model.kernel, RBF) or kernel_type == "rbf":  # faster for RBF
+            if isinstance(self.model, SparseGPRegression):  # work with a pyro module
+                radius = self.pairwise_distances(xstar, X)
+                var = self.model.kernel.variance_unconstrained.exp()
+                length = self.model.kernel.lengthscale_unconstrained.exp()
+                ksx = var * torch.exp((-0.5 * radius / length**2))
+                dK = -(length**-2) * (xstar - X).T * ksx  # (d, N)
+                ddK = (length**-2 * var) * torch.eye(d).to(torch.float64)  # (d, d)
+
+            elif isinstance(self.model, SASGP):  # work with a SAS module
+                assert xstar.dim() == 2, "cannot work with batches yet "
+                xstar = xstar.unsqueeze(0)  # (1, num_x, num_dim)
+                X = torch.unsqueeze(self.model.X, 0)  # (1, num_data, num_dim)
+                lengthscale = self.model.kernel.length_scale.unsqueeze(0)  # (1, 2)
+                var = self.model.kernel.variance  # (1, 1)
+                Ksx = self.model.kernel.K(xstar, X)  # (1, num_x, num_data)
+
+                # dK = -2 * lengthscale * (xstar - X).T * Ksx
+                Xminusxstar = torch.cat(
+                    [xstar[:, i, :] - X for i in range(xstar.shape[1])]
+                )  # (num_x, num_data, num_dim)
+                Xminusxstar = Xminusxstar.transpose(1, 2)  # (num_x, num_dim, num_data)
+                Ksx = Ksx.repeat(xstar.shape[1], 1, 1)  # (num_x, num_x, num_data)
+                lengthscale = lengthscale.repeat(xstar.shape[1], 1, 1)  # (num_x, 1, 2)
+                ## (num_x, num_data, num_dim) = (num_x, 1, num_data) * (num_x, num_dim, num_data)
+                dk = -2 * torch.bmm(Xminusxstar, Ksx)  # (num_x, num_data, num_dim)
+                ddK = 2 * lengthscale**2 * torch.eye(d).to(torch.float64)  # (num_x, num_dim, num_dim)
+                raise NotImplementedError
         else:
             kernel_jac = functional.jacobian(self.model.kernel.forward, (xstar, X), create_graph=False)
             kernel_hes = functional.hessian(self.model.kernel.forward, (xstar, xstar), create_graph=False)
@@ -69,11 +90,11 @@ class Gplvm(Manifold):
         if isinstance(self.model, SparseGPRegression):  # work with a pyro module
             loc, cov = self.model.forward(xstar, full_cov=full_cov)
         elif isinstance(self.model, SASGP):  # work with a SAS module
-            loc, cov = self.embed_sas(xstar)
+            loc, cov = self._embed_sas(xstar, full_cov=full_cov)
         # loc, cov = self.model.forward(torch.squeeze(xstar).float(), full_cov=full_cov)
         return loc, cov  # dims: D x Nstar, Nstar x Nstar
 
-    def embed_sas(self, xstar):
+    def _embed_sas(self, xstar, full_cov):
         # Maps from latent to data space, implements equations 2.23 - 2.24 from Rasmussen.
         assert isinstance(self.model.kernel, RBF), "embed only works with SASGP model"
         assert hasattr(self.model, "Kinv"), "Kinv does not exist"  # assert that Kinv exists
@@ -108,6 +129,9 @@ class Gplvm(Manifold):
         assert mu.shape == (bs, num_data, obs_dim), "mu has wrong shape"
         assert Sigma.shape == (bs, num_data, num_data), "Sigma has wrong shape"
         L = torch.linalg.cholesky_ex(Sigma)  # test if Sigma is positive definite
+
+        if full_cov is False:
+            Sigma = torch.diagonal(Sigma, dim1=1, dim2=2)
         return mu, Sigma
 
     def derivatives(self, coords, method="discretization"):

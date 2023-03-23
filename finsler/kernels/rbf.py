@@ -32,7 +32,7 @@ class RBF(Stationary):
         self.jitter = jitter
 
     def K(self, X, X2=None):
-        variance = torch.exp(self.log_variance).abs().clamp(min=0.0, max=5.0)
+        variance = torch.exp(self.log_variance).abs().clamp(min=0.0, max=np.inf)
         r2 = torch.clamp(self.squared_dist(X, X2), min=0.0, max=np.inf)
         K = variance * torch.exp(-r2 / 2.0)
 

@@ -25,16 +25,16 @@ from finsler.utils.pyro import initialise_kernel
 def get_args():
     parser = argparse.ArgumentParser()
     # initialisation
-    parser.add_argument("--data", default="starfish", type=str)  # train for starfish data
+    parser.add_argument("--data", default="cheese", type=str)  # train for starfish data
     parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--exp_folder", default="models/", type=str)
     opts = parser.parse_args()
     return opts
 
 
-def make(config):
+def make(config, data):
     # initialise kernel
-    Y, X, X_true = initialise_kernel("starfish")
+    Y, X, X_true = initialise_kernel(data)
     lengthscale = torch.tensor(config.lengthscale, dtype=torch.float32)
     variance = torch.tensor(config.variance, dtype=torch.float32)
     noise = torch.tensor(config.noise, dtype=torch.float32)
@@ -94,7 +94,7 @@ def model_pipeline(config=None):
     config = wandb.config
 
     # initialise model
-    model, Y, X_true = make(config)
+    model, Y, X_true = make(config, data=opts.data)
 
     # train model
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
@@ -159,12 +159,12 @@ if __name__ == "__main__":
 
         sweep_config = {
             "method": "random",
-            "name": "sweep",
+            "name": "cheesydata",
             "metric": {"name": "acc_obs", "goal": "minimize"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="finsler_sweep3")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="cheese")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
         print("--- single run mode ---")
