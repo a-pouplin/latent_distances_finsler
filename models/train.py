@@ -150,7 +150,7 @@ if __name__ == "__main__":
         # sweep config parameters
         sweep_dict = {
             "lr": {"values": [1e-2, 1e-3]},
-            "iter": {"distribution": "uniform", "min": 10000, "max": 20000},
+            "iter": {"distribution": "int_uniform", "min": 10000, "max": 20000},
             "kernel": {"values": ["Matern32"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
             "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
