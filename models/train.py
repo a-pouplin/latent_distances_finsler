@@ -160,7 +160,7 @@ if __name__ == "__main__":
         sweep_config = {
             "method": "random",
             "name": "cheesydata",
-            "metric": {"name": "acc_obs", "goal": "maximise"},
+            "metric": {"name": "acc_obs", "goal": "maximize"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
