@@ -35,7 +35,7 @@ def get_args():
 def make(config, data):
     # initialise kernel
     Y, X, X_true = initialise_kernel(data)
-    lengthscale = torch.tensor(config.lengthscale, dtype=torch.float32)
+    lengthscale = config.lengthscale * torch.ones(2, dtype=torch.float32)
     variance = torch.tensor(config.variance, dtype=torch.float32)
     noise = torch.tensor(config.noise, dtype=torch.float32)
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
             "iter": {"distribution": "int_uniform", "min": 10000, "max": 20000},
             "kernel": {"values": ["Matern32"]},
             "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
-            "variance": {"distribution": "uniform", "min": 0.1, "max": 1.0},
+            "variance": {"distribution": "uniform", "min": 0.1, "max": 100.0},
             "noise": {"values": [1e-4]},
         }
 
