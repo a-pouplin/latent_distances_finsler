@@ -110,8 +110,8 @@ def model_pipeline(config=None):
         max_grad = max([p.grad.abs().max() for p in model.parameters()])
         if iter % 100 == 0:
             print(
-                "Batch: {}/{} - loss {:.2f} - grad {:.2f} - lengthscale {:.2f} -  variance {:.3f}".format(
-                    iter, config.iter, loss, max_grad, lengthscale, variance
+                "Batch: {}/{} - loss {:.2f} - grad {:.2f} - lengthscale [{:.2f},{:.2f}] -  variance {:.3f}".format(
+                    iter, config.iter, loss, max_grad, lengthscale[0], lengthscale[1], variance
                 ),
                 end="\r",
             )
