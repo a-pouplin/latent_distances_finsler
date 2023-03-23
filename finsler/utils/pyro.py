@@ -94,9 +94,9 @@ def initialise_kernel(data):
         return Y, X, X_true
 
     elif data == "cheese":  # high dimensions
-        Y, X_true = cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=2000)
+        Y, X_true = cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=4000)
         Y = torch.tensor(Y, dtype=torch.float32)
         blur = torch.normal(0, 1, size=X_true.shape)
-        X = torch.tensor(X_true, dtype=torch.float32) + 0.01 * blur
-        # X = get_prior(Y=Y, init_name="pca")
+        # X = torch.tensor(X_true, dtype=torch.float32) + 0.01 * blur
+        X = get_prior(Y=Y, init_name="pca")
         return Y, X, X_true
