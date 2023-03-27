@@ -87,8 +87,35 @@ class Gplvm(Manifold):
         return dK, ddK
 
     def embed(self, xstar, full_cov=True):
+        # xstar should be torch float tensor
+        xstar = xstar.to(torch.float32)
         if isinstance(self.model, SparseGPRegression):  # work with a pyro module
-            loc, cov = self.model.forward(xstar, full_cov=full_cov)
+            dim_y = self.model.y.shape[0]
+            if xstar.dim() == 3:
+                bs, num_x = xstar.shape[0], xstar.shape[1]
+                loc = torch.zeros(bs, num_x, dim_y)
+                cov = torch.zeros(bs, num_x, num_x)
+                for i in range(bs):
+                    loc_temp, cov_temp = self.model(xstar[i], full_cov=full_cov)
+                    loc[i], cov[i] = loc_temp.T, cov_temp[0]
+            elif xstar.dim() == 2:
+                num_x = xstar.shape[0]
+                loc, cov = self.model.forward(xstar, full_cov=full_cov)
+                loc, cov = loc.T, cov[0]  # cov is the same for all dimensions because isotropic
+                assert loc.shape == (
+                    num_x,
+                    dim_y,
+                ), f"Shape of mean expected to be {num_x, dim_y} but got {loc.shape} instead"
+                if full_cov:
+                    assert cov.shape == (
+                        num_x,
+                        num_x,
+                    ), f"Shape of covariance expected to be {num_x, num_x} but got {cov.shape} instead"
+                else:
+                    assert cov.shape == (
+                        num_x,
+                    ), f"Shape of covariance expected to be {num_x} but got {cov.shape} instead"
+
         elif isinstance(self.model, SASGP):  # work with a SAS module
             loc, cov = self._embed_sas(xstar, full_cov=full_cov)
         # loc, cov = self.model.forward(torch.squeeze(xstar).float(), full_cov=full_cov)
@@ -161,10 +188,15 @@ class Gplvm(Manifold):
 
         if method == "discretization":
             # Needs a lot of samples but faster
-            mean_c, var_c = self.embed(coords)
-            mu_derivatives = mean_c[1:, :] - mean_c[0:-1, :]
-            var_derivatives = var_c.diagonal()[1:] + var_c.diagonal()[0:-1] - 2 * (var_c[0:-1, 1:].diagonal())
-            # mu, var = mu_{i+1} - mu_{i}, s_{i+1,i+1} + s_{i,i} - 2*s_{i,i+1}
+            loc, cov = self.embed(coords)  # loc : (num_data,data_dim), cov: ( num_data, num_data)
+            # Compute derivatives by discretising the curve step by step
+            mu_derivatives = loc[1:, :] - loc[0:-1, :]  # (num_data - 1)
+            cov_nondiag_ = torch.diagonal(cov, offset=1)  # Upper diagonal of cov (num_data - 1)
+            cov_diag_ = torch.diagonal(cov, offset=0)  # diagonal of cov (num_data)
+            var_derivatives = cov_diag_[1:] + cov_diag_[0:-1] - 2 * cov_nondiag_  # (num_data - 1)
+            # variance should be positive
+            var_derivatives = torch.abs(var_derivatives)  # force the variance to be positive
+            assert torch.all(torch.ge(var_derivatives, 0)), "variance should be positive"
 
         elif method == "obs_derivatives":
             # Get the CubicSpline class and get the derivatives
@@ -213,6 +245,8 @@ class Gplvm(Manifold):
         return mu_star.to(torch.float32), var_star.to(torch.float32)
 
     def curve_energy(self, coords):
+        if coords.dim() == 3:
+            return self.curve_energy_batch(coords)
         D, n = self.data.shape
         dmu, dvar = self.derivatives(coords)
         if self.mode == "riemannian":

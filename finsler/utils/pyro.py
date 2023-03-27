@@ -5,15 +5,33 @@ import pandas as pd
 import pyro
 import scipy.io as sio
 import torch
+from pyro.infer import SVI, TraceMeanField_ELBO
 from sklearn.decomposition import PCA
 from sklearn.manifold import Isomap
 
-from finsler.utils.data import cheese_2sphere, starfish_2sphere
+from finsler.utils.data import (
+    cheesboard_2sphere,
+    cheese_2sphere,
+    concentric_2sphere,
+    highdim_starfish_alacilie,
+    starfish_2sphere,
+)
 
 
-def update(optimizer, model, n_samples):
-    loss_fn = pyro.infer.Trace_ELBO().differentiable_loss  # Trace_ELBO
-    loss = loss_fn(model.model, model.guide) / n_samples
+def log_likelihood(model, data, latent_dim=2):
+    raise NotImplementedError
+
+
+def update(optimizer, model, n_samples, mode="tracemeanfield"):
+    print(mode)
+    if mode == "pyro":
+        loss_fn = pyro.infer.Trace_ELBO().differentiable_loss  # Trace_ELBO
+        loss = loss_fn(model.model, model.guide) / n_samples
+    elif mode == "tracemeanfield":
+        svi = SVI(model.model, model.guide, optimizer, loss=TraceMeanField_ELBO())
+        loss = svi.step() / n_samples
+    elif mode == "likelihood":
+        loss = -log_likelihood(model, n_samples)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -22,6 +40,8 @@ def update(optimizer, model, n_samples):
 
 def iteration(model, optimizer, num_iter, n_samples):
     log_params = np.empty((3, num_iter))
+    num_data, latent_dim = model.X_loc.shape
+
     for iter in range(num_iter):
         init_time = time()
         loss = update(optimizer, model, n_samples)
@@ -89,14 +109,46 @@ def initialise_kernel(data):
         Y, X_true = starfish_2sphere(num_classes=5, num_per_class=100)
         Y = torch.tensor(Y, dtype=torch.float32)
         blur = torch.normal(0, 1, size=X_true.shape)
-        # X = torch.tensor(X_true, dtype=torch.float32) + 0.01 * blur
-        X = get_prior(Y=Y, init_name="pca")
+        X = torch.tensor(X_true, dtype=torch.float32)  # + 0.01 * blur
+        # X = get_prior(Y=Y, init_name="pca")
         return Y, X, X_true
 
     elif data == "cheese":  # high dimensions
-        Y, X_true = cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=4000)
+        Y, X_true = cheese_2sphere(num_holes=1, radius_holes=0.5, num_data=2000, center_holes=np.zeros(2))
         Y = torch.tensor(Y, dtype=torch.float32)
         blur = torch.normal(0, 1, size=X_true.shape)
-        # X = torch.tensor(X_true, dtype=torch.float32) + 0.01 * blur
+        X = torch.tensor(X_true, dtype=torch.float32)  # + 0.01 * blur
+        # X = get_prior(Y=Y, init_name="pca")
+        return Y, X, X_true
+
+    elif data == "chessboard":  # high dimensions
+        Y, X_true = cheesboard_2sphere(num_grids=5, num_points=2000)
+        Y = torch.tensor(Y, dtype=torch.float32)
+        blur = torch.normal(0, 1, size=X_true.shape)
+        X = torch.tensor(X_true, dtype=torch.float32)  # + 0.01 * blur
+        # X = get_prior(Y=Y, init_name="pca")
+        return Y, X, X_true
+
+    elif data == "starfish2":  # high dimensions
+        Y, X_true = starfish_2sphere(num_classes=5, num_per_class=200)
+        Y = torch.tensor(Y, dtype=torch.float32)
+        blur = torch.normal(0, 1, size=X_true.shape)
+        # X = torch.tensor(X_true, dtype=torch.float32) #+ 0.01 * blur
+        X = get_prior(Y=Y, init_name="pca")
+        return Y, X, X_true
+
+    elif data == "starfish_cilie":  # high dimensions
+        Y, X_true = highdim_starfish_alacilie(num_classes=5, num_per_class=100)
+        Y = torch.tensor(Y, dtype=torch.float32)
+        blur = torch.normal(0, 1, size=X_true.shape)
+        # X =  X_true.clone().detach().requires_grad_(True) #+ 0.01 * blur
+        X = get_prior(Y=Y, init_name="pca")
+        return Y, X, X_true
+
+    elif data == "concentric_circles":  # high dimensions
+        Y, X_true = concentric_2sphere(num_classes=4, num_per_class=100)
+        Y = torch.tensor(Y, dtype=torch.float32)
+        blur = torch.normal(0, 1, size=X_true.shape)
+        # X =  X_true.clone().detach().requires_grad_(True) #+ 0.01 * blur
         X = get_prior(Y=Y, init_name="pca")
         return Y, X, X_true

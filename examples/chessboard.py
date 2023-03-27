@@ -2,7 +2,6 @@
 
 import argparse
 import os
-import pickle
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -10,9 +9,9 @@ import numpy as np
 import seaborn as sns
 import torch
 from stochman.curves import CubicSpline
-from stochman.discretized_manifold import DiscretizedManifold
 from stochman.geodesic import geodesic_minimizing_energy
-
+from stochman.discretized_manifold import DiscretizedManifold
+import pickle
 from finsler.gplvm import Gplvm
 from finsler.utils.data import make_sphere_surface, on_sphere
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
@@ -26,14 +25,14 @@ def get_args():
     # manifold argments
     parser.add_argument("--num_geod", default=8, type=int)  # num of random geodesics to plot
     parser.add_argument("--iter_energy", default=400, type=int)  # num of steps to minimise energy func
-    parser.add_argument("--save_manifold", default=True, type=bool)  # save model
+    parser.add_argument("--save_manifold", default=True, type=bool)  # save model 
     # data used
-    parser.add_argument("--data", default="cheese", type=str)  # sphere or cheese or vMF
+    parser.add_argument("--data", default="chessboard", type=str)  # sphere or chessboard or vMF
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--exp_folder", default="plots/cheese/", type=str)
-    parser.add_argument("--model_folder", default="models/cheese/", type=str)
-    parser.add_argument("--model_title", default="model_12", type=str)
+    parser.add_argument("--exp_folder", default="plots/chessboard/", type=str)
+    parser.add_argument("--model_folder", default="models/chessboard/", type=str)
+    parser.add_argument("--model_title", default="model_17", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -80,38 +79,39 @@ if __name__ == "__main__":
     print("Y shape: {} -- variance: {:.2f}, lengthscale: {}".format(Y.shape, variance, lengthscale))
 
     # get Riemannian and Finslerian metric
+    model.X = model.X / torch.max(torch.abs(model.X))
     gplvm_riemann = Gplvm(model, mode="riemannian")
     gplvm_finsler = Gplvm(model, mode="finslerian")
     X = model.X.data
+    # normalise data to be between -1 and 1
+    
 
-    # plot observational space with sphere surface
-    y_random = gplvm_riemann.embed(torch.randn(1000, 2))[0].detach().numpy()
-    print(on_sphere(y_random, error=0.1))
-    # plot latent space
-    fig = plt.figure(0)
-    ax = plt.axes()
-    ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
-    plt.show()
+    # # plot observational space with sphere surface
+    # y_random = gplvm_riemann.embed(torch.randn(1000, 2))[0].detach().numpy()
+    # print(on_sphere(y_random, error=0.1))
+    # # plot latent space
+    # fig = plt.figure(0)
+    # ax = plt.axes()
+    # ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
+    # plt.show()
 
-    # histogram of the norm of y
-    fig = plt.figure(0)
-    ax = plt.axes(projection="3d")
-    ax.set_box_aspect([1, 1, 1])
-    XS, YS, ZS = make_sphere_surface()  # for illustration
-    ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.1, zorder=0)
-    ax.scatter3D(Y[:, 0], Y[:, 1], Y[:, 2], c="black", s=1, label="obs data", alpha=1)
-    ax.scatter3D(
-        y_random[:, 0], y_random[:, 1], y_random[:, 2], c="green", s=1, label="random latent data", alpha=1
-    )  # random points taken from the latent
-    plt.show()
-    raise
+    # # histogram of the norm of y 
+    # fig = plt.figure(0)
+    # ax = plt.axes(projection="3d")
+    # ax.set_box_aspect([1, 1, 1])
+    # XS, YS, ZS = make_sphere_surface()  # for illustration
+    # ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.1, zorder=0)
+    # ax.scatter3D(Y[:, 0], Y[:, 1], Y[:, 2], c="black", s=1, label="obs data", alpha=1)
+    # ax.scatter3D(y_random[:,0], y_random[:,1], y_random[:,2], c='green', s=1, label='random latent data', alpha=1) # random points taken from the latent
+    # plt.show()
+    # raise
 
-    # gte discretised manifold and save it
+    # gte discretised manifold and save it 
     modelpathriemann = os.path.join(opts.model_folder, "manifold_riemann_{}.pkl".format(opts.model_title))
     if opts.save_manifold:
         # with Discrete manifold
         with torch.no_grad():
-            ran = torch.linspace(-1.5, 1.5, 50)  # the higher the number of points, the more accurate the geodesics
+            ran = torch.linspace(-1,1, 50)  # the higher the number of points, the more accurate the geodesics
             gridX, gridY = torch.meshgrid([ran, ran], indexing="ij")
             grid = torch.stack((gridX.flatten(), gridY.flatten()), dim=1)  # 100x2
         manifold = DiscretizedManifold()
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     if opts.save_manifold:
         # with Discrete manifold
         with torch.no_grad():
-            ran = torch.linspace(-1.5, 1.5, 50)  # the higher the number of points, the more accurate the geodesics
+            ran = torch.linspace(-1,1, 50)  # the higher the number of points, the more accurate the geodesics
             gridX, gridY = torch.meshgrid([ran, ran], indexing="ij")
             grid = torch.stack((gridX.flatten(), gridY.flatten()), dim=1)  # 100x2
         manifold = DiscretizedManifold()
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     )
     t = torch.linspace(0, 1, eval_grid)
 
-    # computing geodesic curves along the cheese branches
+    # computing geodesic curves along the chessboard branches
     x1 = X[torch.randint(0, len(X), (opts.num_geod,))]
     x0 = X[torch.randint(0, len(X), (opts.num_geod,))]
     # x1 = [[-2, -2], [-2, 1.5], [1, 2.5], [2.5, 0], [1.0, -2.5]]
@@ -274,9 +274,7 @@ if __name__ == "__main__":
     ax.scatter3D(
         Y[:, 0], Y[:, 1], Y[:, 2], label="observed data", marker="o", edgecolors="black", s=1, zorder=2
     )  # observed data points
-    ax.scatter3D(
-        y_random[:, 0], y_random[:, 1], y_random[:, 2], c="green", s=1, label="random latent data", alpha=0.2
-    )  # random points taken from the latent
+    ax.scatter3D(y_random[:,0], y_random[:,1], y_random[:,2], c='green', s=1, label='random latent data', alpha=0.2) # random points taken from the latent
     for i in range(opts.num_geod):
         ax.plot(
             c_obs_riemann[i, ::2, 0],

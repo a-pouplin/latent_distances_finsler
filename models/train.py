@@ -7,8 +7,12 @@ import numpy as np
 import pandas as pd
 import pyro
 import pyro.contrib.gp as gp
+import pyro.distributions as dist
 import pyro.ops.stats as stats
 import torch
+from pyro.infer import SVI, TraceMeanField_ELBO
+from pyro.optim import Adam as AdamPyro
+from torch.nn import Parameter
 
 import wandb
 from finsler.gplvm import Gplvm
@@ -25,27 +29,33 @@ from finsler.utils.pyro import initialise_kernel
 def get_args():
     parser = argparse.ArgumentParser()
     # initialisation
-    parser.add_argument("--data", default="cheese", type=str)  # train for starfish data
-    parser.add_argument("--sweep", action="store_true")
+    parser.add_argument("--data", default="concentric_circles", type=str)  # train for starfish data
+    parser.add_argument("--sweep", default=True, type=bool)
     parser.add_argument("--exp_folder", default="models/", type=str)
+    parser.add_argument("--train_pyro", default=False, type=bool)
     opts = parser.parse_args()
     return opts
 
 
 def make(config, data):
     # initialise kernel
-    Y, X, X_true = initialise_kernel(data)
+    Y, X_prior, X_true = initialise_kernel(data)
     lengthscale = config.lengthscale * torch.ones(2, dtype=torch.float32)
     variance = torch.tensor(config.variance, dtype=torch.float32)
     noise = torch.tensor(config.noise, dtype=torch.float32)
 
     kernel = getattr(gp.kernels, config.kernel)(input_dim=2, variance=variance, lengthscale=lengthscale)
     # Construct and train GP using pyro
+    # X = Parameter(X_prior.clone())
+    X = X_prior
+    # adding inducing points
     if Y.shape[0] < 64:
-        Xu = stats.resample(X.clone(), Y.shape[0])
+        Xu = stats.resample(X_prior.clone(), Y.shape[0])
     else:
-        Xu = stats.resample(X.clone(), 64)
+        Xu = stats.resample(X_prior.clone(), 64)
     gpmodule = gp.models.SparseGPRegression(X, Y.t(), kernel, Xu, noise=noise, jitter=1e-4)
+    # gpmodule.X = pyro.nn.PyroSample(dist.Normal(X_prior, 0.1).to_event()) # no batch shape
+    # gpmodule.autoguide("X", dist.Normal)
     model = gp.models.GPLVM(gpmodule)
     return model, Y, X_true
 
@@ -57,7 +67,7 @@ def test(model, X_true):
     # initialise gplvm
     gplvm_riemann = Gplvm(model, mode="riemannian")
 
-    x_random = np.random.uniform(low=np.min(X), high=np.max(X), size=(100, 2))
+    x_random = np.random.uniform(low=np.min(X), high=np.max(X), size=(1000, 2))
     x_random = torch.tensor(x_random, dtype=torch.float32)
     y_random = gplvm_riemann.embed(x_random)[0].detach().numpy()  # y_random_mean
     acc_obs = on_sphere(y_random)  # 1 if on sphere, 0 if not
@@ -95,27 +105,34 @@ def model_pipeline(config=None):
 
     # initialise model
     model, Y, X_true = make(config, data=opts.data)
-
-    # train model
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
-    for iter in range(config.iter):
-        loss = update(optimizer, model, Y.shape[0], X_true=X_true)
 
-        lengthscale = model.base_model.kernel.lengthscale_unconstrained.data
-        variance = model.base_model.kernel.variance_unconstrained.data
-        with torch.no_grad():
-            torch.clamp_(lengthscale, min=0.01)
-            torch.clamp_(variance, min=0.01)
+    if opts.train_pyro:
+        print("training pyro model ........")
+        losses = gp.util.train(model, num_steps=config.iter, optimizer=optimizer)
+        print(".......... training done !")
+        plt.plot(losses)
+        plt.show()
+    else:
+        # train model
+        for iter in range(config.iter):
+            loss = update(optimizer, model, Y.shape[0])
 
-        max_grad = max([p.grad.abs().max() for p in model.parameters()])
-        if iter % 100 == 0:
-            print(
-                "Batch: {}/{} - loss {:.2f} - grad {:.2f} - lengthscale [{:.2f},{:.2f}] -  variance {:.3f}".format(
-                    iter, config.iter, loss, max_grad, lengthscale[0], lengthscale[1], variance
-                ),
-                end="\r",
-            )
-        wandb.log({"loss": loss, "grad": max_grad, "lengthscale": lengthscale, "variance": variance})
+            lengthscale = model.base_model.kernel.lengthscale_unconstrained.data
+            variance = model.base_model.kernel.variance_unconstrained.data
+            with torch.no_grad():
+                torch.clamp_(lengthscale, min=0.01)
+                torch.clamp_(variance, min=0.01)
+
+            # max_grad = max([p.grad.abs().max() for p in model.parameters()])
+            if iter % 100 == 0:
+                print(
+                    "Batch: {}/{} - loss {:.2f}  - lengthscale [{:.2f},{:.2f}] -  variance {:.3f}".format(
+                        iter, config.iter, loss, lengthscale[0], lengthscale[1], variance
+                    ),
+                    end="\r",
+                )
+            wandb.log({"loss": loss, "lengthscale": lengthscale, "variance": variance})
 
     # save model
     incr_filename = save_model(model, folderpath)
@@ -149,30 +166,41 @@ if __name__ == "__main__":
         print("--- sweep mode ---")
         # sweep config parameters
         sweep_dict = {
-            "lr": {"values": [1e-1, 1e-2, 1e-3]},
-            "iter": {"distribution": "int_uniform", "min": 10000, "max": 20000},
+            "lr": {"values": [1e-3]},
+            "iter": {"distribution": "int_uniform", "min": 8000, "max": 25000},
             "kernel": {"values": ["Matern32"]},
-            "lengthscale": {"distribution": "uniform", "min": 0.2, "max": 2.0},
-            "variance": {"distribution": "uniform", "min": 0.1, "max": 100.0},
+            "lengthscale": {"distribution": "uniform", "min": 0.01, "max": 0.5},
+            "variance": {"distribution": "uniform", "min": 0.1, "max": 2.0},
             "noise": {"values": [1e-4]},
         }
 
         sweep_config = {
             "method": "random",
-            "name": "cheesydata",
-            "metric": {"name": "acc_obs", "goal": "maximize"},
+            "name": "concentric_circles",
+            "metric": {"name": "dist", "goal": "minimize"},
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="cheese")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="concentric_circles")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
+        # print("--- single run mode ---")
+        # # test params
+        # config_params = {
+        #     "lr": 1e-2,
+        #     "iter": 8000,
+        #     "kernel": "Matern32",
+        #     "lengthscale": 0.5,
+        #     "variance": 0.95,
+        #     "noise": 1e-4,
+        # }
+        # model_pipeline(config=config_params)
         print("--- single run mode ---")
         # best params
         config_params = {
             "lr": 1e-3,
             "iter": 17000,
-            "kernel": "RBF",
+            "kernel": "Matern32",
             "lengthscale": 0.24,
             "variance": 0.95,
             "noise": 1e-4,

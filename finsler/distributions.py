@@ -67,7 +67,6 @@ class NonCentralNakagami_old:
             term_gamma = gamma((D + 1) / 2) / gamma(D / 2)
 
         term_hyp1f1 = H1f1Gradients.apply(torch.tensor(-1 / 2), torch.tensor(D / 2), -1 / 2 * omega)
-        raise
         expectation = torch.sqrt(var) * const * term_gamma * term_hyp1f1
         return expectation
 
@@ -97,7 +96,7 @@ class H1f1Gradients(Function):
         assert b.type() == "torch.FloatTensor", "b should be torch.float"
         assert a.dim() == 0 and b.dim() == 0, "a and b should be scalar"
         assert b != 0, "b should be different to zero"
-        assert torch.all(torch.lt(z, 0)), "All elements should be negative"
+        assert torch.all(torch.le(z, 0)), f"All elements should be negative but found: {z.max()}"
 
         # inputs in torch
         ctx.save_for_backward(a, b, z)
@@ -146,7 +145,8 @@ class NonCentralNakagami:
             mu = mu.unsqueeze(0)
         if var.dim() == 1:
             var = var.unsqueeze(0)
-
+        var = torch.abs(var)
+        # assert torch.all(torch.gt(var, 0)), f"All elements should be positive but found: {var.min()}"
         self.dim_data = mu.shape[-1]  # dim_data
         self.var = var  # (bs, num_data)
         self.omega = (mu**2).sum(dim=-1) / var  # (bs, num_data)
@@ -167,4 +167,5 @@ class NonCentralNakagami:
     def variance(self):
         # eq 2.11. variance = var[|z|], when z ~ N(mu, var)
         variance = self.var * (self.omega + self.dim_data - 2 * (self.term_gamma * self.term_hyp1f1) ** 2)
+        assert variance.min() >= 0, f"variance should be positive but found: {variance.min()}"
         return variance

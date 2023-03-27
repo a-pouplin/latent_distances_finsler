@@ -189,11 +189,13 @@ if __name__ == "__main__":
     assert isinstance(manifold_finsler, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
 
     # start and end points for geodesics
-    torch.manual_seed(opts.seed)  # fix seed for reproducibility
+    # torch.manual_seed(opts.seed)  # fix seed for reproducibility
     # p0 = torch.tensor([[-0.6, -0.20], [0.6, -0.3], [-0.3,0.15]])  # opts.num_geodxD
     # p1 = torch.tensor([[-0.2, 0.3], [0.0, 0.0], [0.3,0.15]])  # opts.num_geodxD
-    p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    # p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
+    p0 = torch.tensor([[-0.4, -0.2], [-0.7, -0.1], [0.1, 0.224], [-0.53, 0.167], [-0.272, 0.689], [0.246, 0.65]])
+    p1 = torch.tensor([[-0.2, 0.22], [-0.5, 0.6], [0.428, -0.098], [-0.03, 0.479], [0.745, -0.149], [0.844, -0.064]])
 
     # p0 = random_centered_points(center=[-0.6, 0.0], radius=0.5, num_points=opts.num_geod)
     # p1 = random_centered_points(center=[0.6, -0.3], radius=0.5, num_points=opts.num_geod)
@@ -277,25 +279,32 @@ if __name__ == "__main__":
     # fig3.savefig(filepath)
     # print("--- plot of the latent space saved as: {}".format(filepath))
 
-    # plot with images of mnist
+    # plot with images of fashion mnsit
     if opts.plot_latent:
         from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
-        mnist_y = model.y[::10].detach().numpy().reshape((-1, 28, 28))
-        mnist_x = data_latent[::10]
+        mnist_y = model.y[::5].detach().numpy().reshape((-1, 28, 28))
+        mnist_x = data_latent[::5]
         fig4 = plt.figure(1, figsize=(10, 10))
         ax4 = plt.axes()
-        # ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=10, vmin=0.60, vmax=0.61)
+        ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=15)
         for n, image in enumerate(mnist_y):
-            im = OffsetImage(image, zoom=0.4, cmap=plt.cm.gray, alpha=0.7)
+            im = OffsetImage(image, zoom=0.3, cmap=plt.cm.gray, alpha=0.8)
             ab = AnnotationBbox(im, (mnist_x[n, 0], mnist_x[n, 1]), xycoords="data", frameon=False)
             ax4.add_artist(ab)
         # ax4.scatter(mnist_x[:, 0], mnist_x[:, 1], c="k", s=1)
-        spline_finsler.plot(color="orange", linewidth=1.5, zorder=1e8, label="Finslerian geodesic", linestyle="--")
-        spline_riemann.plot(color="yellow", linewidth=1.5, zorder=1e8, label="Riemannian geodesic", linestyle="--")
-        spline_euclidean.plot(color="k", linewidth=1.5, zorder=-1e8, label="Euclidean geodesic")
+        spline_finsler.plot(color="orange", linewidth=1.5, zorder=2e6, label="Finslerian geodesic", linestyle="--")
+        spline_riemann.plot(color="purple", linewidth=1.5, zorder=1e6, label="Riemannian geodesic")
+        # spline_euclidean.plot(color="gray", linewidth=1.5, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
         plt.xlim(-1, 1)
         plt.ylim(-1, 1)
-        fig4.savefig(opts.model_folder + "/latent_fmnist_images_{}.svg".format(opts.mode))
-        # fig4.colorbar(heatmap)
+        ax4.set_aspect("equal")
+        cax = fig4.add_axes([ax4.get_position().x1 + 0.01, ax4.get_position().y0, 0.02, ax4.get_position().height])
+        fig4.colorbar(heatmap, cax=cax)
+        fig4.savefig(opts.model_folder + "/latent_fashion_images_{}.svg".format(opts.mode))
         plt.show()
+        print(
+            "--- plot of the latent space with images saved as: {}".format(
+                opts.model_folder + "/latent_fshion_images_{}.svg".format(opts.mode)
+            )
+        )
