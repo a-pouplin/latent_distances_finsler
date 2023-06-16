@@ -66,7 +66,7 @@ if __name__ == "__main__":
     )
     t = torch.linspace(0, 1, eval_grid)
 
-    x0_index = np.argmax(np.linalg.norm(X, axis=1))
+    x0_index = np.argmax(np.linalg.norm(X, axis=1)) - 1  # just a random point on the right side of the manifold
     x0 = np.tile(X[x0_index], (opts.num_geod, 1))
     x1 = np.empty((opts.num_geod, 2))
     print(df.index.unique())

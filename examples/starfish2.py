@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import pickle
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -9,9 +10,9 @@ import numpy as np
 import seaborn as sns
 import torch
 from stochman.curves import CubicSpline
-from stochman.geodesic import geodesic_minimizing_energy
 from stochman.discretized_manifold import DiscretizedManifold
-import pickle
+from stochman.geodesic import geodesic_minimizing_energy
+
 from finsler.gplvm import Gplvm
 from finsler.utils.data import make_sphere_surface, on_sphere
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
@@ -25,7 +26,7 @@ def get_args():
     # manifold argments
     parser.add_argument("--num_geod", default=4, type=int)  # num of random geodesics to plot
     parser.add_argument("--iter_energy", default=400, type=int)  # num of steps to minimise energy func
-    parser.add_argument("--save_manifold", default=False, type=bool)  # save model 
+    parser.add_argument("--save_manifold", default=False, type=bool)  # save model
     # data used
     parser.add_argument("--data", default="starfish2", type=str)  # sphere or starfish2 or vMF
     # load previous exp
@@ -60,15 +61,16 @@ def compute_heatmaps(n_grid):
         )
         fig.savefig(os.path.join(opts.final_plots, "heatmap_{}_{}_{}.svg".format(n_grid, mode, opts.data)))
 
+
 def segment_lengths(batch_curves):
     """
     Computes the length of each segment of a batch of curves.
     :param batch_curves: (batch_size, num_points, dim) tensor
     :return lengths: (batch_size,) tensor
     """
-    diffs = np.diff(batch_curves, axis=1) # (batch_size, num_points-1, dim)
-    norm_diff = np.linalg.norm(batch_curves, axis=2) # (batch_size, num_points-1)
-    lengths = np.sum(norm_diff, axis=1) # (batch_size,)
+    diffs = np.diff(batch_curves, axis=1)  # (batch_size, num_points-1, dim)
+    norm_diff = np.linalg.norm(batch_curves, axis=2)  # (batch_size, num_points-1)
+    lengths = np.sum(norm_diff, axis=1)  # (batch_size,)
     return lengths
 
 
@@ -95,8 +97,6 @@ if __name__ == "__main__":
     gplvm_finsler = Gplvm(model, mode="finslerian")
     X = model.X.data
 
-
-
     # # plot observational space with sphere surface
     # y_random = gplvm_riemann.embed(torch.randn(1000, 2))[0].detach().numpy()
     # print(on_sphere(y_random, error=0.1))
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     # ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
     # plt.show()
 
-    # # histogram of the norm of y 
+    # # histogram of the norm of y
     # fig = plt.figure(0)
     # ax = plt.axes(projection="3d")
     # ax.set_box_aspect([1, 1, 1])
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     # plt.show()
     # raise
 
-    # gte discretised manifold and save it 
+    # gte discretised manifold and save it
     modelpathriemann = os.path.join(opts.model_folder, "manifold_riemann_{}.pkl".format(opts.model_title))
     if opts.save_manifold:
         # with Discrete manifold
@@ -185,9 +185,9 @@ if __name__ == "__main__":
     c_obs_euclid = gplvm_riemann.embed(splineE(torch.linspace(0, 1, 100)))[0].detach().numpy()
 
     print(c_obs_finsler.shape)
-    print('Finsler', segment_lengths(c_obs_finsler))
-    print('Riemann', segment_lengths(c_obs_riemann))
-    print('Euclidean', segment_lengths(c_obs_euclid))
+    print("Finsler", segment_lengths(c_obs_finsler))
+    print("Riemann", segment_lengths(c_obs_riemann))
+    print("Euclidean", segment_lengths(c_obs_euclid))
 
     fig = plt.figure(2)
     ax = plt.axes(projection="3d")
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     XS, YS, ZS = make_sphere_surface()  # for illustration
     ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.2, zorder=2)
     ax.scatter3D(
-        Y[:, 0], Y[:, 1], Y[:, 2], label="observed data", marker="o", edgecolors="black", s=1, alpha = 0.8, zorder=2
+        Y[:, 0], Y[:, 1], Y[:, 2], label="observed data", marker="o", edgecolors="black", s=1, alpha=0.8, zorder=2
     )  # observed data points
     for i in range(opts.num_geod):
         ax.plot(
@@ -235,105 +235,6 @@ if __name__ == "__main__":
     plt.show()
 
     filename = "observational.svg"
-    filepath = create_filepath(folderpath, filename)
-    fig.savefig(filepath, dpi=fig.dpi)
-    print("--- plot of the observation space saved as: {}".format(filepath))
-    raise
-
-    # Energy function computed with riemannian metric
-    optimizer = torch.optim.LBFGS
-    eval_grid = 20
-    dim_latent, dim_obs = X.shape[1], Y.shape[1]
-    c_coords_riemann, c_obs_riemann = torch.empty((opts.num_geod, eval_grid, dim_latent)), np.empty(
-        (opts.num_geod, eval_grid, dim_obs)
-    )
-    c_coords_finsler, c_obs_finsler = torch.empty((opts.num_geod, eval_grid, dim_latent)), np.empty(
-        (opts.num_geod, eval_grid, dim_obs)
-    )
-    t = torch.linspace(0, 1, eval_grid)
-
-    # computing geodesic curves along the starfish2 branches
-    x1 = X[torch.randint(0, len(X), (opts.num_geod,))]
-    x0 = X[torch.randint(0, len(X), (opts.num_geod,))]
-    # x1 = [[-2, -2], [-2, 1.5], [1, 2.5], [2.5, 0], [1.0, -2.5]]
-    # x0 = np.tile([0, 0], (len(x1), 1))
-
-    for i in range(opts.num_geod):
-        start, ends = torch.tensor([x0[i]], dtype=torch.float), torch.tensor([x1[i]], dtype=torch.float)
-
-        print("\n")
-        print("Riemannian")
-        curve_r = CubicSpline(start, ends, requires_grad=True)
-        geodesic_minimizing_energy(curve_r, gplvm_riemann, optimizer, opts.iter_energy, eval_grid)
-
-        print("\n")
-        print("Finslerian")
-        curve_f = CubicSpline(start, ends, requires_grad=True)
-        geodesic_minimizing_energy(curve_f, gplvm_finsler, optimizer, opts.iter_energy, eval_grid)
-
-        with torch.no_grad():
-            c_coords_riemann[i, :, :] = curve_r(t)
-            c_coords_finsler[i, :, :] = curve_f(t)
-            c_obs_riemann[i, :, :], _ = gplvm_riemann.embed(c_coords_riemann[i, :, :].squeeze())
-            c_obs_finsler[i, :, :], _ = gplvm_finsler.embed(c_coords_finsler[i, :, :].squeeze())
-
-    # plot latent space with geodesics
-    colors = sns.color_palette("viridis", n_colors=opts.num_geod)
-    fig = plt.figure(1)
-    ax = plt.axes()
-    ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode="variance", n_grid=50)
-    for i in range(opts.num_geod):
-        ax.plot(c_coords_riemann[i, ::2, 0], c_coords_riemann[i, ::2, 1], c=colors[i], lw=1, alpha=0.5)
-        ax.plot(c_coords_finsler[i, 1::2, 0], c_coords_finsler[i, 1::2, 1], c=colors[i], lw=1, ls=":")
-    ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
-    fig.colorbar(im)
-    plt.title("Geodesic in the latent space")
-    plt.show()
-
-    filename = "latent.png"
-    filepath = create_filepath(folderpath, filename)
-    fig.savefig(filepath, dpi=fig.dpi)
-    print("--- plot of the latent space saved as: {}".format(filepath))
-
-    # plot observational space with geodesics
-    y_random = gplvm_riemann.embed(torch.randn(100, 2))[0].detach().numpy()
-    fig = plt.figure(2)
-    ax = plt.axes(projection="3d")
-    ax.set_box_aspect([1, 1, 1])
-    XS, YS, ZS = make_sphere_surface()  # for illustration
-    ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.2, zorder=0)
-    ax.scatter3D(
-        Y[:, 0], Y[:, 1], Y[:, 2], label="observed data", marker="o", edgecolors="black", s=1, zorder=2
-    )  # observed data points
-    ax.scatter3D(y_random[:,0], y_random[:,1], y_random[:,2], c='green', s=1, label='random latent data', alpha=0.2) # random points taken from the latent
-    for i in range(opts.num_geod):
-        ax.plot(
-            c_obs_riemann[i, ::2, 0],
-            c_obs_riemann[i, ::2, 1],
-            c_obs_riemann[i, ::2, 2],
-            c=colors[i],
-            lw=1,
-            alpha=0.5,
-            label="Riemann",
-            zorder=9,
-        )
-        ax.plot(
-            c_obs_finsler[i, 1::2, 0],
-            c_obs_finsler[i, 1::2, 1],
-            c_obs_finsler[i, ::2, 2],
-            c=colors[i],
-            lw=1,
-            ls=":",
-            label="Finsler",
-            zorder=10,
-        )
-    ax.legend(bbox_to_anchor=(1.5, 1))
-    ax.set_xlim((-1, 1)), ax.set_ylim((-1, 1)), ax.set_zlim((-1, 1))
-    ax.grid(False)
-    ax.axis("off")
-    plt.show()
-
-    filename = "observational.png"
     filepath = create_filepath(folderpath, filename)
     fig.savefig(filepath, dpi=fig.dpi)
     print("--- plot of the observation space saved as: {}".format(filepath))
