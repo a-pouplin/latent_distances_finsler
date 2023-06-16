@@ -146,9 +146,9 @@ def initialise_kernel(data):
         return Y, X, X_true
 
     elif data == "concentric_circles":  # high dimensions
-        Y, X_true = concentric_2sphere(num_classes=4, num_per_class=100)
+        Y, X_true = concentric_2sphere(num_classes=3, num_per_class=200)
         Y = torch.tensor(Y, dtype=torch.float32)
         blur = torch.normal(0, 1, size=X_true.shape)
-        # X =  X_true.clone().detach().requires_grad_(True) #+ 0.01 * blur
-        X = get_prior(Y=Y, init_name="pca")
+        X = torch.tensor(X_true, dtype=torch.float32)  # + 0.01 * blur
+        # X = get_prior(Y=Y, init_name="pca")
         return Y, X, X_true
