@@ -15,7 +15,7 @@ from stochman.discretized_manifold import DiscretizedManifold
 from stochman.geodesic import geodesic_minimizing_energy
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST, FashionMNIST, ImageFolder
+from torchvision.datasets import CIFAR10
 
 from finsler.gplvm import Gplvm
 from finsler.kernels.rbf import RBF
@@ -31,14 +31,14 @@ def get_args():
 
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--model_folder", default="models/sas/mnist", type=str)
-    parser.add_argument("--model_title", default="mnist", type=str)
+    parser.add_argument("--model_folder", default="models/sas/cifar", type=str)
+    parser.add_argument("--model_title", default="model_03_27_2023_11_46_33", type=str)
     parser.add_argument("--mode", default="riemannian", type=str)  # finslerian or riemannian
     parser.add_argument("--save_model", default=False, type=str)
-    parser.add_argument("--num_geod", default=8, type=int)
+    parser.add_argument("--num_geod", default=15, type=int)
     parser.add_argument("--res", default=10, type=int)  # resolution for the manifold grid
-    parser.add_argument("--num_train", default=10000, type=int)
-    parser.add_argument("--seed", default=12, type=int)
+    parser.add_argument("--num_train", default=5000, type=int)
+    parser.add_argument("--seed", default=2, type=int)
     parser.add_argument("--plot_images", default=False, type=bool)
     parser.add_argument("--plot_latent", default=True, type=bool)
     opts = parser.parse_args()
@@ -46,10 +46,10 @@ def get_args():
 
 
 def load_data(num_train):
-    ## MNIST // TRAIN=60.000, TEST=10.000
+    ## cifar // TRAIN=60.000, TEST=10.000
     transform = transforms.ToTensor()
-    trainset = MNIST(root="./data/", train=True, download=True, transform=transform)
-    # testset = MNIST(root='./data/', train=False, download=True, transform=transform)
+    trainset = CIFAR10(root="./data/", train=True, download=True, transform=transform)
+    # testset = cifar(root='./data/', train=False, download=True, transform=transform)
 
     # get a subset of the data
     trainset = torch.utils.data.Subset(trainset, range(num_train))
@@ -69,7 +69,7 @@ def load_sas_gplvm(model_folder, model_title):
     model = pickle_load(folder_path=f"{model_folder}", file_name=f"{model_title}.pt")
     # times, loss = model['runtimes'], model['losses']
     model_params, parser_args = model["model"], model["args"]
-    data_dimension = 784
+    data_dimension = 32 * 32 * 3
 
     ## defining kernel and likelihood
     kernel_ls = model_params["kernel.length_scale"]
@@ -105,7 +105,9 @@ def random_centered_points(center, radius, num_points):
 
 
 def initialise_sasmodel(model, data_tensor, label_tensor):
-    model.y = torch.squeeze(data_tensor.data).reshape(-1, 784).float().detach()  # data in observed space (5000x784)
+    model.y = (
+        torch.squeeze(data_tensor.data).reshape(-1, 32 * 32 * 3).float().detach()
+    )  # data in observed space (5000x784)
     num_data = model.y.shape[0]
     model.ylabels = label_tensor.detach()  # labels for data (5000,)
     model.X = model.amortization_net(model.y).detach()
@@ -139,7 +141,6 @@ def plot_reconstruction(model, gplvm, num_imgs=10):
 if __name__ == "__main__":
 
     opts = get_args()
-    torch.manual_seed(opts.seed)
 
     # model path for finsler and riemann models !
     # modelpath_riemann = os.path.join(
@@ -148,9 +149,9 @@ if __name__ == "__main__":
     modelpath_riemann = os.path.join(
         opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_riemannian.pkl"
     )
-    modelpath_finsler = os.path.join(
-        opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_finslerian.pkl"
-    )
+    # modelpath_finsler = os.path.join(
+    #     opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_finslerian.pkl"
+    # )
 
     print("We are loading the models:")
     print("Model path Riemannian: ", modelpath_riemann)
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     # load data
     data_tensor, label_tensor = load_data(opts.num_train)
 
-    # load the SAS-GPLVM model trained on fashion mnist
+    # load the SAS-GPLVM model trained on  cifar
     sasmodel = load_sas_gplvm(opts.model_folder, opts.model_title)
 
     # add data to model:
@@ -173,6 +174,25 @@ if __name__ == "__main__":
     # models wrapped with gplvm code to compute geodesics with stochman
     gplvm = Gplvm(model)  # Note that we only need the embed function from this class, so the mode is not used
 
+    # with Discrete manifold
+    with torch.no_grad():
+        ran = torch.linspace(-1.0, 1.0, opts.res)  # the higher the number of points, the more accurate the geodesics
+        gridX, gridY = torch.meshgrid([ran, ran], indexing="ij")
+        grid = torch.stack((gridX.flatten(), gridY.flatten()), dim=1)  # 100x2
+
+    if opts.save_model:
+        manifold = DiscretizedManifold()
+        manifold.fit(model=gplvm, grid=[ran, ran], batch_size=256)
+        print("Manifold fitted. Saving model.....")
+        # save manifold
+        with open(modelpath_riemann, "wb") as f:
+            pickle.dump(manifold, f, pickle.HIGHEST_PROTOCOL)
+        print("model saved !")
+
+    with open(modelpath_riemann, "rb") as file:
+        manifold = pickle.load(file)
+    assert isinstance(manifold, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
+
     # dk, ddk = gplvm.evaluateDiffKernel(model.X[:5], model.X)
 
     # with Discrete manifold
@@ -185,9 +205,9 @@ if __name__ == "__main__":
         manifold_riemann = pickle.load(file)
     assert isinstance(manifold_riemann, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
 
-    with open(modelpath_finsler, "rb") as file:
-        manifold_finsler = pickle.load(file)
-    assert isinstance(manifold_finsler, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
+    # with open(modelpath_finsler, "rb") as file:
+    #     manifold_finsler = pickle.load(file)
+    # assert isinstance(manifold_finsler, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
 
     # start and end points for geodesics
     # torch.manual_seed(opts.seed)  # fix seed for reproducibility
@@ -202,10 +222,10 @@ if __name__ == "__main__":
 
     # define splines for both finsler and riemannian manifolds
     spline_riemann, _ = manifold_riemann.connecting_geodesic(p0, p1)
-    spline_finsler, _ = manifold_finsler.connecting_geodesic(p0, p1)
+    # spline_finsler, _ = manifold_finsler.connecting_geodesic(p0, p1)
     t = torch.linspace(0, 1, 100)
     curves_riemann = spline_riemann(t)
-    curves_finsler = spline_finsler(t)
+    # curves_finsler = spline_finsler(t)
 
     # cubic spline from p0 to p1
     spline_euclidean = CubicSpline(p0, p1)
@@ -219,7 +239,7 @@ if __name__ == "__main__":
     # plt.show()
 
     if opts.plot_images:
-        # get mnist images on manifold
+        # get cifar images on manifold
         num_images = 8
         y_img_riemann, _ = gplvm.embed(curves_riemann[:, :: int(len(t) / num_images), :])
         y_img_finsler, _ = gplvm.embed(curves_finsler[:, :: int(len(t) / num_images), :])
@@ -238,7 +258,7 @@ if __name__ == "__main__":
                 axs[i, j].imshow(y_img_euclidean[i, j, :, :], cmap="gray")
                 axs[i, j].axis("off")
         fig.text(0.5, 0.04, "Euclidean", ha="center")
-        fig.savefig(opts.model_folder + "/images_mnist_euclidean.svg")
+        fig.savefig(opts.model_folder + "/images_cifar_euclidean.svg")
 
         # figure with fashion mnsit images riemannian
         fig2, axs2 = plt.subplots(opts.num_geod, num_images, figsize=(num_images, opts.num_geod))
@@ -247,7 +267,7 @@ if __name__ == "__main__":
                 axs2[i, j].imshow(y_img_riemann[i, j, :, :], cmap="gray")
                 axs2[i, j].axis("off")
         fig2.text(0.5, 0.04, "Riemannian", ha="center")
-        fig2.savefig(opts.model_folder + "/images_mnist_riemann.svg")
+        fig2.savefig(opts.model_folder + "/images_cifar_riemann.svg")
 
         # figure with fashion mnsit images finslerian
         fig3, axs3 = plt.subplots(opts.num_geod, num_images, figsize=(num_images, opts.num_geod))
@@ -256,14 +276,14 @@ if __name__ == "__main__":
                 axs3[i, j].imshow(y_img_finsler[i, j, :, :], cmap="gray")
                 axs3[i, j].axis("off")
         fig3.text(0.5, 0.04, "Finslerian", ha="center")
-        fig3.savefig(opts.model_folder + "/images_mnist_finsler.svg")
+        fig3.savefig(opts.model_folder + "/images_cifar_finsler.svg")
 
         # fig3, axs3 = plt.subplots(1, num_images, figsize=(num_images * 2, 2))
         # for i in range(opts.num_geod):
         #     axs3[i].imshow(y_img_finsler[0, i, :, :], cmap="gray")
         #     axs3[i].axis("off")
         # axs3.x_label = "Finslerian geodesic"
-        # fig3.savefig(opts.model_folder + "/images_mnist_finsler.png")
+        # fig3.savefig(opts.model_folder + "/images_cifar_finsler.png")
         # plt.show()
 
     # # plot manifold and geodesics in latent space
@@ -274,68 +294,37 @@ if __name__ == "__main__":
     # spline_manifold.plot(color='k', linewidth=1)
     # spline_euclidean.plot(color='r', linewidth=1)
     # plt.title("Geodesic in the latent space")
-    # filename = "latent_mnist_{}.png".format(opts.mode)
+    # filename = "latent_cifar_{}.png".format(opts.mode)
     # filepath = os.path.join(opts.model_folder, filename)
     # fig3.savefig(filepath)
     # print("--- plot of the latent space saved as: {}".format(filepath))
 
-    # plot with images of mnist
+    # plot with images of cifar
     if opts.plot_latent:
         from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
-        mnist_y = model.y[::10].detach().numpy().reshape((-1, 28, 28))
-        mnist_x = data_latent[::10]
-        mnist_label = label_tensor[::10]
-
-        fig4 = plt.figure(1, figsize=(10, 10))
+        # cifar_y = model.y[::100].detach().numpy().reshape((-1, 3, 32, 32))
+        cifar_x = data_latent[::100]
+        fig4 = plt.figure(1, figsize=(8, 8))
         ax4 = plt.axes()
-        # ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=15)
-        for n, image in enumerate(mnist_y):
-            im = OffsetImage(image, zoom=0.5, cmap=plt.cm.gray, alpha=0.8)
-            ab = AnnotationBbox(im, (mnist_x[n, 0], mnist_x[n, 1]), xycoords="data", frameon=False)
-            ax4.add_artist(ab)
-        # ax4.scatter(mnist_x[:, 0], mnist_x[:, 1], c="k", s=1)
-        spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
-        spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
-        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
+        ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=10)
+        # for n, image in enumerate(cifar_y):
+        #     im = OffsetImage(image, zoom=0.3, cmap=plt.cm.gray, alpha=0.8)
+        #     ab = AnnotationBbox(im, (cifar_x[n, 0], cifar_x[n, 1]), xycoords="data", frameon=False)
+        # ax4.add_artist(ab)
+        ax4.scatter(cifar_x[:, 0], cifar_x[:, 1], c="k", s=1)
+        # spline_finsler.plot(color="orange", linewidth=1.5, zorder=2e6, label="Finslerian geodesic", linestyle="--")
+        spline_riemann.plot(color="purple", linewidth=1.5, zorder=1e6, label="Riemannian geodesic")
+        # spline_euclidean.plot(color="gray", linewidth=1.5, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
         plt.xlim(-1, 1)
         plt.ylim(-1, 1)
-        ax4.legend()
         ax4.set_aspect("equal")
-        ax4.axis("off")
-
-        # cax = fig4.add_axes([ax4.get_position().x1 + 0.01, ax4.get_position().y0, 0.02, ax4.get_position().height])
-        # fig4.colorbar(heatmap, cax=cax)
-        fig4.savefig(opts.model_folder + "/latent_mnist_withimages_{}.svg".format(opts.mode))
+        cax = fig4.add_axes([ax4.get_position().x1 + 0.01, ax4.get_position().y0, 0.02, ax4.get_position().height])
+        fig4.colorbar(heatmap, cax=cax)
+        fig4.savefig(opts.model_folder + "/latent_cifar_images_{}.svg".format(opts.mode))
         plt.show()
         print(
             "--- plot of the latent space with images saved as: {}".format(
-                opts.model_folder + "/latent_mnist_images_{}.svg".format(opts.mode)
-            )
-        )
-
-        mnist_y = model.y[::1].detach().numpy().reshape((-1, 28, 28))
-        mnist_x = data_latent[::1]
-        mnist_label = label_tensor[::1]
-        fig5 = plt.figure(1, figsize=(10, 10))
-        ax5 = plt.axes()
-        ax5, heatmap, _, _ = volume_heatmap(ax5, gplvm, data_latent, mode="variance", n_grid=25, vmin=0.54)
-        # print color labels
-        ax5.scatter(mnist_x[:, 0], mnist_x[:, 1], c=mnist_label, s=2, alpha=0.8, cmap="tab10")
-        spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
-        spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
-        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
-        plt.xlim(-1, 1)
-        plt.ylim(-1, 1)
-        ax5.set_aspect("equal")
-        cax = fig5.add_axes([ax5.get_position().x1 + 0.01, ax5.get_position().y0, 0.02, ax5.get_position().height])
-        fig5.colorbar(heatmap, cax=cax, alpha=0.5)
-        fig5.savefig(opts.model_folder + "/latent_mnist_withoutimages_{}.svg".format(opts.mode))
-        ax5.legend()
-        ax5.axis("off")
-        plt.show()
-        print(
-            "--- plot of the latent space with images saved as: {}".format(
-                opts.model_folder + "/latent_mnist_images_{}.svg".format(opts.mode)
+                opts.model_folder + "/latent_cifar_images_{}.svg".format(opts.mode)
             )
         )

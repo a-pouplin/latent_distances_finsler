@@ -285,23 +285,54 @@ if __name__ == "__main__":
 
         mnist_y = model.y[::5].detach().numpy().reshape((-1, 28, 28))
         mnist_x = data_latent[::5]
+        mnist_label = label_tensor[::5]
+
         fig4 = plt.figure(1, figsize=(10, 10))
         ax4 = plt.axes()
-        ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=15)
+        # ax4, heatmap, _, _ = volume_heatmap(ax4, gplvm, data_latent, mode="variance", n_grid=15)
         for n, image in enumerate(mnist_y):
-            im = OffsetImage(image, zoom=0.3, cmap=plt.cm.gray, alpha=0.8)
+            im = OffsetImage(image, zoom=0.5, cmap=plt.cm.gray, alpha=0.8)
             ab = AnnotationBbox(im, (mnist_x[n, 0], mnist_x[n, 1]), xycoords="data", frameon=False)
             ax4.add_artist(ab)
         # ax4.scatter(mnist_x[:, 0], mnist_x[:, 1], c="k", s=1)
-        spline_finsler.plot(color="orange", linewidth=1.5, zorder=2e6, label="Finslerian geodesic", linestyle="--")
-        spline_riemann.plot(color="purple", linewidth=1.5, zorder=1e6, label="Riemannian geodesic")
-        # spline_euclidean.plot(color="gray", linewidth=1.5, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
+        spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
+        spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
+        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
         plt.xlim(-1, 1)
         plt.ylim(-1, 1)
+        ax4.legend()
         ax4.set_aspect("equal")
-        cax = fig4.add_axes([ax4.get_position().x1 + 0.01, ax4.get_position().y0, 0.02, ax4.get_position().height])
-        fig4.colorbar(heatmap, cax=cax)
-        fig4.savefig(opts.model_folder + "/latent_fashion_images_{}.svg".format(opts.mode))
+        ax4.axis("off")
+
+        # cax = fig4.add_axes([ax4.get_position().x1 + 0.01, ax4.get_position().y0, 0.02, ax4.get_position().height])
+        # fig4.colorbar(heatmap, cax=cax)
+        fig4.savefig(opts.model_folder + "/latent_fashion_withimages_{}.svg".format(opts.mode))
+        plt.show()
+        print(
+            "--- plot of the latent space with images saved as: {}".format(
+                opts.model_folder + "/latent_fshion_images_{}.svg".format(opts.mode)
+            )
+        )
+
+        mnist_y = model.y[::1].detach().numpy().reshape((-1, 28, 28))
+        mnist_x = data_latent[::1]
+        mnist_label = label_tensor[::1]
+        fig5 = plt.figure(1, figsize=(10, 10))
+        ax5 = plt.axes()
+        ax5, heatmap, _, _ = volume_heatmap(ax5, gplvm, data_latent, mode="variance", n_grid=25, vmin=0.54)
+        # print color labels
+        ax5.scatter(mnist_x[:, 0], mnist_x[:, 1], c=mnist_label, s=2, alpha=0.8, cmap="tab10")
+        spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
+        spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
+        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
+        plt.xlim(-1, 1)
+        plt.ylim(-1, 1)
+        ax5.set_aspect("equal")
+        cax = fig5.add_axes([ax5.get_position().x1 + 0.01, ax5.get_position().y0, 0.02, ax5.get_position().height])
+        fig5.colorbar(heatmap, cax=cax, alpha=0.5)
+        fig5.savefig(opts.model_folder + "/latent_fashion_withoutimages_{}.svg".format(opts.mode))
+        ax5.legend()
+        ax5.axis("off")
         plt.show()
         print(
             "--- plot of the latent space with images saved as: {}".format(

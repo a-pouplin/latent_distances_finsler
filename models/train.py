@@ -16,7 +16,7 @@ from torch.nn import Parameter
 
 import wandb
 from finsler.gplvm import Gplvm
-from finsler.utils.data import make_pinwheel_data, on_sphere
+from finsler.utils.data import on_sphere
 from finsler.utils.helper import (
     create_filepath,
     create_folder,
@@ -121,8 +121,8 @@ def model_pipeline(config=None):
             lengthscale = model.base_model.kernel.lengthscale_unconstrained.data
             variance = model.base_model.kernel.variance_unconstrained.data
             with torch.no_grad():
-                torch.clamp_(lengthscale, min=0.01)
-                torch.clamp_(variance, min=0.01)
+                torch.clamp_(lengthscale, min=0.01, max=0.5)
+                torch.clamp_(variance, min=0.1)
 
             # max_grad = max([p.grad.abs().max() for p in model.parameters()])
             if iter % 100 == 0:
@@ -166,11 +166,11 @@ if __name__ == "__main__":
         print("--- sweep mode ---")
         # sweep config parameters
         sweep_dict = {
-            "lr": {"values": [1e-3]},
-            "iter": {"distribution": "int_uniform", "min": 8000, "max": 25000},
+            "lr": {"values": [1e-2]},
+            "iter": {"distribution": "int_uniform", "min": 10000, "max": 15000},
             "kernel": {"values": ["Matern32"]},
-            "lengthscale": {"distribution": "uniform", "min": 0.01, "max": 0.5},
-            "variance": {"distribution": "uniform", "min": 0.1, "max": 2.0},
+            "lengthscale": {"distribution": "uniform", "min": 0.001, "max": 0.05},
+            "variance": {"distribution": "uniform", "min": 1.0, "max": 2.0},
             "noise": {"values": [1e-4]},
         }
 
@@ -181,7 +181,7 @@ if __name__ == "__main__":
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="concentric_circles")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="concentric_circles_3")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
         # print("--- single run mode ---")
