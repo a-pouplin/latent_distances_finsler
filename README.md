@@ -20,4 +20,4 @@ The GPLVM models for the starfish, qPCR and font data have been saved. The figur
 * `make figure6`. The latent spaces of the fontdata and the qPCR data are plotted.
 * `make figure7`. The latent spaces of the MNIST and fashion MNIST are plotted.
 
-Note that the `starfish/model.pkl` is not exactly similar to the one from the paper, but it doesn't change the conclusion and the main findings.
+Note that the figure for the fontdata might not be exactly similar to the one from the paper, but it doesn't change the conclusion and the main findings.
