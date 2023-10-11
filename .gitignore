@@ -139,6 +139,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+.vscode/
 
 # folder to be ignored
 plots/
