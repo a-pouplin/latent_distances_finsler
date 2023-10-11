@@ -139,11 +139,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# pytype static type analyzer
+.DS_Store
 .vscode/
 
 # folder to be ignored
 plots/
-trained_models/
 
 # models/
 wandb/
