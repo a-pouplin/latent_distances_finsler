@@ -23,16 +23,16 @@ matplotlib.rcParams["svg.fonttype"] = "none"
 def get_args():
     parser = argparse.ArgumentParser()
     # manifold argments
-    parser.add_argument("--num_geod", default=4, type=int)  # num of random geodesics to plot
-    parser.add_argument("--iter_energy", default=400, type=int)  # num of steps to minimise energy func
+    parser.add_argument("--num_geod", default=10, type=int)  # num of random geodesics to plot
+    parser.add_argument("--res", default=50, type=int)  # grid resolution for discretization manifold
     parser.add_argument("--save_manifold", default=False, type=bool)  # save model
     # data used
-    parser.add_argument("--data", default="starfish", type=str)  # sphere or starfish or vMF
+    parser.add_argument("--data", default="concentric_circles", type=str)  # sphere or concentric or vMF
     # load previous exp
     parser.add_argument("--train", action="store_false")
-    parser.add_argument("--exp_folder", default="plots/starfish/", type=str)
-    parser.add_argument("--model_folder", default="models/starfish/", type=str)
-    parser.add_argument("--model_title", default="model_10", type=str)
+    parser.add_argument("--exp_folder", default="plots/concentric_circles/", type=str)
+    parser.add_argument("--model_folder", default="models/concentric_circles/", type=str)
+    parser.add_argument("--model_title", default="model_35", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -101,7 +101,9 @@ if __name__ == "__main__":
     if opts.save_manifold:
         # with Discrete manifold
         with torch.no_grad():
-            ran = torch.linspace(-1.0, 1.0, 50)  # the higher the number of points, the more accurate the geodesics
+            ran = torch.linspace(
+                -1.0, 1.0, opts.res
+            )  # the higher the number of points, the more accurate the geodesics
             gridX, gridY = torch.meshgrid([ran, ran], indexing="ij")
             grid = torch.stack((gridX.flatten(), gridY.flatten()), dim=1)  # 100x2
         manifold = DiscretizedManifold()
@@ -116,7 +118,9 @@ if __name__ == "__main__":
     if opts.save_manifold:
         # with Discrete manifold
         with torch.no_grad():
-            ran = torch.linspace(-1.0, 1.0, 50)  # the higher the number of points, the more accurate the geodesics
+            ran = torch.linspace(
+                -1.0, 1.0, opts.res
+            )  # the higher the number of points, the more accurate the geodesics
             gridX, gridY = torch.meshgrid([ran, ran], indexing="ij")
             grid = torch.stack((gridX.flatten(), gridY.flatten()), dim=1)  # 100x2
         manifold = DiscretizedManifold()
@@ -135,9 +139,12 @@ if __name__ == "__main__":
     assert isinstance(manifoldF, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
 
     print("Manifold loaded !")
-    p1 = torch.tensor([[0.8, 0.1], [0.2, 0.8], [-0.7, 0.4], [-0.5, -0.5], [0.3, -0.7]])
-    p0 = torch.tensor([[0.3, -0.7], [0.8, 0.1], [0.2, 0.8], [-0.7, 0.4], [-0.5, -0.5]])
-    opts.num_geod = p0.shape[0]
+    # generate random point on half circle
+    angles = torch.linspace(-np.pi, np.pi, opts.num_geod)
+    p0 = 1.0 * torch.stack((torch.cos(angles), torch.sin(angles)), dim=1)
+    # p0 = torch.random.uniform(-1, 1, size=(opts.num_geod, 2))
+
+    p1 = torch.tensor([-1.0, 0.0]).repeat(opts.num_geod, 1)
 
     splineR, _ = manifoldR.connecting_geodesic(p0, p1)
     splineF, _ = manifoldF.connecting_geodesic(p0, p1)
@@ -146,7 +153,7 @@ if __name__ == "__main__":
     colors = sns.color_palette("viridis", n_colors=opts.num_geod)
     fig = plt.figure(1)
     ax = plt.axes()
-    ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode="variance", n_grid=15)
+    ax, im, hm_values, hm_ltt = volume_heatmap(ax, gplvm_riemann, X, mode="variance", n_grid=20)
     ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1, alpha=0.5)
     splineR.plot(color="purple", linewidth=1.5, zorder=1e5)
     splineF.plot(color="orange", linewidth=1.5, zorder=1e5)
@@ -158,6 +165,7 @@ if __name__ == "__main__":
     filepath = create_filepath(folderpath, filename)
     fig.savefig(filepath, dpi=fig.dpi)
     print("--- plot of the latent space saved as: {}".format(filepath))
+    plt.show()
 
     c_obs_riemann = gplvm_riemann.embed(splineR(torch.linspace(0, 1, 100)))[0].detach().numpy()
     c_obs_finsler = gplvm_finsler.embed(splineF(torch.linspace(0, 1, 100)))[0].detach().numpy()

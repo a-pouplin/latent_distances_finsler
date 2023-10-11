@@ -96,7 +96,7 @@ def volume(model, points, mode):
     return volume_hausdorff, paths, points
 
 
-def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None, with_indicatrix=False):
+def volume_heatmap(ax, model, X, mode, n_grid=10, log=True, vmin=None, vmax=None, with_indicatrix=False):
     print(end="/n")
     if with_indicatrix:
         if mode in ["variance", "vol_riemann"]:
@@ -126,7 +126,12 @@ def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None
         print("number of negative elemnts", np.sum(map < 0))
         print("min map:{}, max map:{}".format(np.min(map), np.max(map)))
         map[map <= 1e-8] = 1e-8
+    else:
+        raise ValueError(
+            "mode not recognized, should be in ['variance', 'vol_riemann', 'vol_riemann2', 'vol_finsler', 'diff']"
+        )
 
+    map = np.squeeze(map)
     if torch.is_tensor(xx):
         xx = xx.detach().numpy()
     if log:
@@ -139,12 +144,12 @@ def volume_heatmap(ax, model, X, mode, n_grid=20, log=True, vmin=None, vmax=None
             patch = PathPatch(path, linewidth=1, edgecolor="tab:orange", fill=False)
             ax.add_patch(patch)
 
-    max_norm = 2 * np.max(np.linalg.norm(X, axis=-1))
+    max_norm = np.max(np.linalg.norm(X, axis=-1))
     im = ax.imshow(
         grid,
         # extent=(Xmin[0], Xmax[0], Xmin[1], Xmax[1]),
-        # extent = (-max_norm, max_norm, -max_norm, max_norm),
-        extent=(-4, 4, -4, 4),
+        extent=(-max_norm, max_norm, -max_norm, max_norm),
+        # extent=(-4, 4, -4, 4),
         # extent=(-6, 6, -6, 6),
         origin="lower",
         cmap=cmap_sns,

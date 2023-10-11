@@ -19,7 +19,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     # manifold argments
     parser.add_argument("--num_geod", default=5, type=int)  # num of random geodesics to plot
-    parser.add_argument("--iter_energy", default=150, type=int)  # num of steps to minimise energy func
+    parser.add_argument("--iter_energy", default=50, type=int)  # num of steps to minimise energy func
     # data used
     parser.add_argument("--data", default="font", type=str)
     # load previous exp
@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     # Energy function computed with riemannian metric
     optimizer = torch.optim.LBFGS
-    eval_grid = 50
+    eval_grid = 16
     dim_latent, dim_obs = X.shape[1], Y.shape[1]
     c_coords_riemann, c_obs_riemann = torch.empty((opts.num_geod, eval_grid, dim_latent)), np.empty(
         (opts.num_geod, eval_grid, dim_obs)

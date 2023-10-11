@@ -38,11 +38,11 @@ def make_sphere_surface(r=1):
     return x, y, z
 
 
-def on_sphere(x):
+def on_sphere(x, error=0.1):
     # to check if the data points is on the sphere (as they should be)
     num_total = x.shape[0]
     r = np.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2)
-    num_onsphere = np.sum((r > 0.9) & (r < 1.1))
+    num_onsphere = np.sum((r > 1 - error) & (r < 1 + error))
     return num_onsphere / num_total
 
 
@@ -58,6 +58,20 @@ def make_pinwheel_data(num_classes, num_per_class, radial_std=0.5, tangential_st
     rotations = np.reshape(rotations.T, (-1, 2, 2))
     pinwheel = 10 * np.random.permutation(np.einsum("ti,tij->tj", features, rotations))
     return pinwheel / np.sqrt(np.linalg.norm(pinwheel))
+
+
+def make_pinwheel_data_alacilie(radial_std, tangential_std, num_classes, num_per_class, rate):
+    rads = np.linspace(0, 2 * np.pi, num_classes, endpoint=False)
+
+    features = np.random.randn(num_classes * num_per_class, 2) * np.array([radial_std, tangential_std])
+    features[:, 0] += 1.0
+    labels = np.repeat(np.arange(num_classes), num_per_class)
+
+    angles = rads[labels] + rate * np.exp(features[:, 0])
+    rotations = np.stack([np.cos(angles), -np.sin(angles), np.sin(angles), np.cos(angles)])
+    rotations = np.reshape(rotations.T, (-1, 2, 2))
+    v = 10 * np.random.permutation(np.einsum("ti,tij->tj", features, rotations))
+    return v / np.sqrt(np.linalg.norm(v))
 
 
 def make_starfish(num_classes=5, num_per_class=100):
@@ -88,15 +102,94 @@ def highdim_starfish(dim=10, num_classes=5, num_per_class=100):
     return y, v
 
 
+def projection_stereographic(x, y):
+    norm = x**2 + y**2 + 1
+    obs_x = 2 * x / norm
+    obs_y = 2 * y / norm
+    obs_z = (x**2 + y**2 - 1) / norm
+    return obs_x, obs_y, obs_z
+
+
 def starfish_2sphere(num_classes=5, num_per_class=200):
-    def projection_stereographic(x, y):
-        norm = x**2 + y**2 + 1
-        obs_x = 2 * x / norm
-        obs_y = 2 * y / norm
-        obs_z = (x**2 + y**2 - 1) / norm
-        return obs_x, obs_y, obs_z
 
     latent_data = make_pinwheel_data(num_classes, num_per_class)
+    obs_x, obs_y, obs_z = projection_stereographic(latent_data[:, 0], latent_data[:, 1])
+
+    obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
+    return obs_data, latent_data
+
+
+def make_cheese_data(num_holes, radius_holes, num_data, center_holes):
+    # create data points uniformely distributed and remove data to shape holes in the latent space
+    np.random.seed(seed=42)
+    data = np.random.uniform(-1, 1, size=[num_data, 2])
+    if center_holes is None:
+        center_holes = np.random.uniform(-1 + radius_holes, 1 - radius_holes, size=[num_holes, 2])
+    for i in range(num_holes):
+        data = data[np.linalg.norm(data - center_holes[i], axis=1) > radius_holes]
+    return data
+
+
+def cheese_2sphere(num_holes=3, radius_holes=0.2, num_data=4000, center_holes=None):
+
+    latent_data = make_cheese_data(num_holes, radius_holes, num_data, center_holes)
+    obs_x, obs_y, obs_z = projection_stereographic(latent_data[:, 0], latent_data[:, 1])
+
+    obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
+    return obs_data, latent_data
+
+
+def make_chessboard_data(num_grids, num_points):
+    # Compute the grid size and the number of points per grid
+    grid_size = 1.0 / num_grids
+    points_per_grid = int(num_points / (num_grids * num_grids))
+
+    # Generate the grid coordinates
+    grid_coords = np.linspace(0, 1, num_grids + 1)
+
+    # Generate the points in a chessboard pattern
+    points = []
+    for i in range(num_grids):
+        for j in range(num_grids):
+            if (i + j) % 2 == 0:
+                x_coords = np.random.uniform(grid_coords[i], grid_coords[i + 1], points_per_grid)
+                y_coords = np.random.uniform(grid_coords[j], grid_coords[j + 1], points_per_grid)
+                points.extend(list(zip(x_coords, y_coords)))
+    # Convert the points to a numpy array and return it
+    # centered at the origin and scaled to [-1, 1]
+    points = 1.5 * (np.array(points) - 0.5)
+    return points
+
+
+def cheesboard_2sphere(num_grids=5, num_points=2000):
+    latent_data = make_chessboard_data(num_grids, num_points)
+    obs_x, obs_y, obs_z = projection_stereographic(latent_data[:, 0], latent_data[:, 1])
+
+    obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
+    return obs_data, latent_data
+
+
+def highdim_starfish_alacilie(num_classes=5, num_per_class=100):
+    v = torch.tensor(make_pinwheel_data_alacilie(0.75, 0.15, num_classes, num_per_class, 0.025))
+    v = v.to(torch.float32)
+    net = torch.nn.Sequential(torch.nn.Linear(2, 8), torch.nn.ReLU(), torch.nn.Linear(8, 16))
+    y = net(v)
+    return y, v
+
+
+def make_concentric_circle_data(num_classes, num_per_class):
+    np.random.seed(seed=42)
+    data = []
+    for r in range(1, num_classes + 1):
+        theta = np.random.uniform(0, 2 * np.pi, num_per_class)
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        data.extend(list(zip(x, y)))
+    return np.array(data) / (num_classes + 1)
+
+
+def concentric_2sphere(num_classes=5, num_per_class=100):
+    latent_data = make_concentric_circle_data(num_classes, num_per_class)
     obs_x, obs_y, obs_z = projection_stereographic(latent_data[:, 0], latent_data[:, 1])
 
     obs_data = np.stack([obs_x, obs_y, obs_z], axis=1)
@@ -106,6 +199,19 @@ def starfish_2sphere(num_classes=5, num_per_class=200):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    X = make_pinwheel_data(num_classes=5, num_per_class=200, radial_std=0.5, tangential_std=0.1, rate=0.06)
-    plt.scatter(X[:, 0], X[:, 1])
+    # # v = make_pinwheel_data_alacilie(0.75, 0.15, 5, 50, 0.025)
+    # v = make_concentric_circle_data(5, 100)
+    # # x = make_chessboard_data()
+    # plt.scatter(v[:, 0], v[:, 1], color='blue')
+    # plt.show()
+    # raise
+    # X = make_pinwheel_data(num_classes=5, num_per_class=200, radial_std=0.5, tangential_std=0.1, rate=0.06)
+    # Y, X = cheese_2sphere(num_holes=1, radius_holes=0.4, num_data=4000, center_holes=np.zeros(2))
+    Y, X = concentric_2sphere()
+    # plt.scatter(X[:, 0], X[:, 1])
+    fig = plt.figure(2)
+    ax = plt.axes(projection="3d")
+    ax.set_box_aspect([1, 1, 1])
+    ax.scatter3D(Y[:, 0], Y[:, 1], Y[:, 2])
+    ax.set_xlim((-1, 1)), ax.set_ylim((-1, 1)), ax.set_zlim((-1, 1))
     plt.show()

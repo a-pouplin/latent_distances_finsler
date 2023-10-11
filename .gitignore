@@ -140,8 +140,14 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# pytype static type analyzer
+.DS_Store
+.vscode/
+
 # folder to be ignored
 plots/
-trained_models/
+data/MNIST
+data/FashionMNIST
+
 # models/
 wandb/

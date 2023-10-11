@@ -18,8 +18,6 @@ from finsler.visualisation.latent import (
     plot_indicatrices_along_geodesic,
 )
 
-matplotlib.rcParams["svg.fonttype"] = "none"
-
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -30,7 +28,7 @@ def get_args():
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--model_folder", default="models/starfish/", type=str)
     parser.add_argument("--exp_folder", default="plots/latent_indicatrices/", type=str)
-    parser.add_argument("--model_title", default="model", type=str)
+    parser.add_argument("--model_title", default="model_10", type=str)
     opts = parser.parse_args()
     return opts
 
@@ -85,25 +83,19 @@ if __name__ == "__main__":
     opts = get_args()
     print("options: {}".format(opts))
 
-    folderpath = os.path.abspath(str(opts.exp_folder) + "/" + str(opts.model_title))
-    create_folder(folderpath)
-    print("--- figures saved in:", folderpath)
-
     # load previously training gplvm model
     model = pickle_load(folder_path=f"{opts.model_folder}", file_name=f"{opts.model_title}.pkl")
     Y = model.y.data.numpy().transpose()
     X = model.X.data.numpy()
     lengthscale = model.kernel.lengthscale_unconstrained.data
     variance = model.kernel.variance_unconstrained.data
-    print("Y shape: {} -- variance: {:.2f}, lengthscale: {:.2f}".format(Y.shape, variance, lengthscale))
 
     # get Riemannian and Finslerian metric
     gplvm_riemann = Gplvm(model, mode="riemannian")
     gplvm_finsler = Gplvm(model, mode="finslerian")
 
     # plot latent space with indicatrices
-    fig = plt.figure(1)
-    ax = plt.axes()
+    fig, ax = plt.subplots()
 
     # plot along the geodesic
     if opts.num_geod != 0:
@@ -117,7 +109,7 @@ if __name__ == "__main__":
     else:
         ax = plot_indicatrices(ax, gplvm_riemann, X, n_grid=8)
 
-    ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
+    # ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
     ax.set_xlim(-5, 5)
     ax.set_ylim(-5, 5)
 
@@ -125,7 +117,9 @@ if __name__ == "__main__":
     plt.title("Latent space with indicatrices")
     plt.show()
 
-    filename = "latent.png"
-    filepath = create_filepath(folderpath, filename)
+    raise
+    folderpath = os.path.abspath(str(opts.exp_folder) + "/" + str(opts.model_title))
+    create_folder(folderpath)
+    filepath = create_filepath(folderpath, filename="latent.png")
     fig.savefig(filepath, dpi=fig.dpi)
     print("--- indiactrices in latent space saved as: {}".format(filepath))

@@ -99,7 +99,7 @@ def train_gp(file_name):
 
     # save model
     model_save = {"model": gpmodel, "kernel": kernel, "Y": Y, "X": X}
-    exp_folder = "trained_models/debug/"
+    exp_folder = "models/debug/"
     pickle_save(model_save, exp_folder, file_name)
 
 
@@ -150,13 +150,10 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     file_name = "parametric.pkl"
-    # train_gp(file_name)
-    exp_folder = "trained_models/debug/"
+    exp_folder = "models/debug/"
     model = pickle_load(exp_folder, file_name)
     gpr, X, Y, kernel = model["model"], model["X"], model["Y"], model["kernel"]
     xstar = torch.tensor(np.expand_dims(np.linspace(-np.pi, np.pi, 100), axis=1), requires_grad=False)
-
-    outDir = "/Users/alpu/Desktop/Finsler_figures/plots/appendix"
 
     fig = plt.figure()
     ax = plt.axes()
@@ -167,7 +164,8 @@ if __name__ == "__main__":
     ax = plot_derivatives_theory(ax, xstar)
     ax.legend(loc="lower center", ncol=4)
     plt.show()
-    fig.savefig(os.path.join(outDir, "{}.svg".format("derivatives")), dpi=fig.dpi, bbox_inches="tight")
 
+    # outDir = "results/plots/appendix"
+    # fig.savefig(os.path.join(outDir, "{}.svg".format("derivatives")), dpi=fig.dpi, bbox_inches="tight")
     # print(derivatives(xstar, model, method="discretization")[1][:10])
     # print(derivatives(xstar, model, method="obs_derivatives")[1][:10])
