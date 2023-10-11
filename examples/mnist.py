@@ -2,20 +2,14 @@ import argparse
 import os
 import pickle
 
-import matplotlib
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
-import seaborn as sns
-import stochman
 import torch
-import torchvision
 from stochman.curves import CubicSpline
 from stochman.discretized_manifold import DiscretizedManifold
-from stochman.geodesic import geodesic_minimizing_energy
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST, FashionMNIST, ImageFolder
+from torchvision.datasets import MNIST
 
 from finsler.gplvm import Gplvm
 from finsler.kernels.rbf import RBF
@@ -141,10 +135,6 @@ if __name__ == "__main__":
     opts = get_args()
     torch.manual_seed(opts.seed)
 
-    # model path for finsler and riemann models !
-    # modelpath_riemann = os.path.join(
-    #     opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with10000_riemannian.pkl"
-    # )
     modelpath_riemann = os.path.join(
         opts.model_folder, f"manifold_{opts.model_title}_res{opts.res}_with{opts.num_train}_riemannian.pkl"
     )
@@ -154,7 +144,7 @@ if __name__ == "__main__":
 
     print("We are loading the models:")
     print("Model path Riemannian: ", modelpath_riemann)
-    # print("Model path Finslerian: ", modelpath_finsler)
+    print("Model path Finslerian: ", modelpath_finsler)
 
     # load data
     data_tensor, label_tensor = load_data(opts.num_train)
@@ -190,15 +180,8 @@ if __name__ == "__main__":
     assert isinstance(manifold_finsler, DiscretizedManifold), "Manifold should be of type DiscretizedManifold"
 
     # start and end points for geodesics
-    # torch.manual_seed(opts.seed)  # fix seed for reproducibility
-    # p0 = torch.tensor([[-0.6, -0.20], [0.6, -0.3], [-0.3,0.15]])  # opts.num_geodxD
-    # p1 = torch.tensor([[-0.2, 0.3], [0.0, 0.0], [0.3,0.15]])  # opts.num_geodxD
     p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
     p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    # p0 = torch.tensor([[]])
-
-    # p0 = random_centered_points(center=[-0.6, 0.0], radius=0.5, num_points=opts.num_geod)
-    # p1 = random_centered_points(center=[0.6, -0.3], radius=0.5, num_points=opts.num_geod)
 
     # define splines for both finsler and riemannian manifolds
     spline_riemann, _ = manifold_riemann.connecting_geodesic(p0, p1)
@@ -210,13 +193,6 @@ if __name__ == "__main__":
     # cubic spline from p0 to p1
     spline_euclidean = CubicSpline(p0, p1)
     lines = spline_euclidean(t)
-
-    # plot geodesics and euclidean distances
-    # plt.figure()
-    # for i in range(opts.num_geod):
-    #     plt.plot(curves[i, :,  0].detach().numpy(), curves[i, :, 1].detach().numpy(), 'k')
-    #     plt.plot(lines[i, :,  0].detach().numpy(), lines[i, :, 1].detach().numpy(), 'r')
-    # plt.show()
 
     if opts.plot_images:
         # get mnist images on manifold
@@ -258,27 +234,6 @@ if __name__ == "__main__":
         fig3.text(0.5, 0.04, "Finslerian", ha="center")
         fig3.savefig(opts.model_folder + "/images_mnist_finsler.svg")
 
-        # fig3, axs3 = plt.subplots(1, num_images, figsize=(num_images * 2, 2))
-        # for i in range(opts.num_geod):
-        #     axs3[i].imshow(y_img_finsler[0, i, :, :], cmap="gray")
-        #     axs3[i].axis("off")
-        # axs3.x_label = "Finslerian geodesic"
-        # fig3.savefig(opts.model_folder + "/images_mnist_finsler.png")
-        # plt.show()
-
-    # # plot manifold and geodesics in latent space
-    # fig3, axs3 = plt.subplots(1, 1, figsize=(5, 5))
-    # axs3.scatter(data_latent[::10, 0], data_latent[::10, 1], c=label_tensor[::10], s=2, alpha=0.8, cmap='tab10')
-    # sm = plt.cm.ScalarMappable(cmap='tab10')
-    # fig3.colorbar(sm)
-    # spline_manifold.plot(color='k', linewidth=1)
-    # spline_euclidean.plot(color='r', linewidth=1)
-    # plt.title("Geodesic in the latent space")
-    # filename = "latent_mnist_{}.png".format(opts.mode)
-    # filepath = os.path.join(opts.model_folder, filename)
-    # fig3.savefig(filepath)
-    # print("--- plot of the latent space saved as: {}".format(filepath))
-
     # plot with images of mnist
     if opts.plot_latent:
         from matplotlib.offsetbox import AnnotationBbox, OffsetImage
@@ -294,10 +249,12 @@ if __name__ == "__main__":
             im = OffsetImage(image, zoom=0.5, cmap=plt.cm.gray, alpha=0.8)
             ab = AnnotationBbox(im, (mnist_x[n, 0], mnist_x[n, 1]), xycoords="data", frameon=False)
             ax4.add_artist(ab)
-        # ax4.scatter(mnist_x[:, 0], mnist_x[:, 1], c="k", s=1)
+        ax4.scatter(mnist_x[:, 0], mnist_x[:, 1], c="k", s=1)
         spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
         spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
-        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
+        spline_euclidean.plot(
+            color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5
+        )
         plt.xlim(-1, 1)
         plt.ylim(-1, 1)
         ax4.legend()
@@ -324,7 +281,9 @@ if __name__ == "__main__":
         ax5.scatter(mnist_x[:, 0], mnist_x[:, 1], c=mnist_label, s=2, alpha=0.8, cmap="tab10")
         spline_finsler.plot(color="orange", linewidth=2.0, zorder=1e6, label="Finsler geodesic")
         spline_riemann.plot(color="purple", linewidth=2.0, zorder=2e6, label="Riemann geodesic", linestyle=(0, (5, 10)))
-        # spline_euclidean.plot(color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5)
+        spline_euclidean.plot(
+            color="gray", linewidth=2.0, zorder=1e6, label="Euclidean geodesic", linestyle="--", alpha=0.5
+        )
         plt.xlim(-1, 1)
         plt.ylim(-1, 1)
         ax5.set_aspect("equal")

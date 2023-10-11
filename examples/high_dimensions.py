@@ -1,6 +1,5 @@
 import argparse
 import os
-from logging import raiseExceptions
 
 import matplotlib.pyplot as plt
 import numpy as np

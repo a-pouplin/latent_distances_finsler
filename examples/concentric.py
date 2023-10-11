@@ -97,26 +97,6 @@ if __name__ == "__main__":
     gplvm_finsler = Gplvm(model, mode="finslerian")
     X = model.X.data
 
-    # # plot observational space with sphere surface
-    # y_random = gplvm_riemann.embed(torch.randn(1000, 2))[0].detach().numpy()
-    # print(on_sphere(y_random, error=0.1))
-    # # plot latent space
-    # fig = plt.figure(0)
-    # ax = plt.axes()
-    # ax.scatter(X[:, 0], X[:, 1], marker="o", edgecolors="black", s=1)
-    # plt.show()
-
-    # # histogram of the norm of y
-    # fig = plt.figure(0)
-    # ax = plt.axes(projection="3d")
-    # ax.set_box_aspect([1, 1, 1])
-    # XS, YS, ZS = make_sphere_surface()  # for illustration
-    # ax.plot_surface(XS, YS, ZS, shade=True, color="gray", alpha=0.1, zorder=0)
-    # ax.scatter3D(Y[:, 0], Y[:, 1], Y[:, 2], c="black", s=1, label="obs data", alpha=1)
-    # ax.scatter3D(y_random[:,0], y_random[:,1], y_random[:,2], c='green', s=1, label='random latent data', alpha=1) # random points taken from the latent
-    # plt.show()
-    # raise
-
     # gte discretised manifold and save it
     modelpathriemann = os.path.join(opts.model_folder, "manifold_riemann_{}.pkl".format(opts.model_title))
     if opts.save_manifold:

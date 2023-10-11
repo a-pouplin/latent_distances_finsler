@@ -2,26 +2,21 @@ import argparse
 import os
 import pickle
 
-import matplotlib
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
-import seaborn as sns
-import stochman
 import torch
-import torchvision
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from stochman.curves import CubicSpline
 from stochman.discretized_manifold import DiscretizedManifold
-from stochman.geodesic import geodesic_minimizing_energy
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, MNIST, FashionMNIST, ImageFolder
+from torchvision.datasets import FashionMNIST
 
 from finsler.gplvm import Gplvm
 from finsler.kernels.rbf import RBF
 from finsler.likelihoods.gaussian import Gaussian
 from finsler.sasgp import SASGP
-from finsler.utils.helper import create_filepath, pickle_load
+from finsler.utils.helper import pickle_load
 
 
 def get_args():
@@ -151,24 +146,16 @@ if __name__ == "__main__":
 
     # start and end points for geodesics
     torch.manual_seed(2)  # fix seed for reproducibility
-    # p0 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
-    # p1 = data_latent[torch.randint(high=num_data, size=[opts.num_geod], dtype=torch.long)]  # opts.num_geodxD
     p0 = random_centered_points(center=[-0.5, 0.0], radius=0.2, num_points=opts.num_geod)
     p1 = random_centered_points(center=[0.5, -0.3], radius=0.2, num_points=opts.num_geod)
 
     spline_manifold, _ = manifold.connecting_geodesic(p0, p1)
     t = torch.linspace(0, 1, 100)
     curves = spline_manifold(t)
+
     # cubic spline from p0 to p1
     spline_euclidean = CubicSpline(p0, p1)
     lines = spline_euclidean(t)
-
-    # plot geodesics and euclidean distances
-    # plt.figure()
-    # for i in range(opts.num_geod):
-    #     plt.plot(curves[i, :,  0].detach().numpy(), curves[i, :, 1].detach().numpy(), 'k')
-    #     plt.plot(lines[i, :,  0].detach().numpy(), lines[i, :, 1].detach().numpy(), 'r')
-    # plt.show()
 
     # get mnist images on manifold
     num_images = 20
@@ -195,22 +182,7 @@ if __name__ == "__main__":
     plt.title("Geodesics on an euclidean manifold")
     fig2.savefig(opts.model_folder + "/images_fmnist_euclidean.png")
 
-    # # plot manifold and geodesics in latent space
-    # fig3, axs3 = plt.subplots(1, 1, figsize=(5, 5))
-    # axs3.scatter(data_latent[::10, 0], data_latent[::10, 1], c=label_tensor[::10], s=2, alpha=0.8, cmap='tab10')
-    # sm = plt.cm.ScalarMappable(cmap='tab10')
-    # fig3.colorbar(sm)
-    # spline_manifold.plot(color='k', linewidth=1)
-    # spline_euclidean.plot(color='r', linewidth=1)
-    # plt.title("Geodesic in the latent space")
-    # filename = "latent_fmnist_{}.png".format(opts.mode)
-    # filepath = os.path.join(opts.model_folder, filename)
-    # fig3.savefig(filepath)
-    # print("--- plot of the latent space saved as: {}".format(filepath))
-
     # plot with images of mnist
-    from matplotlib.offsetbox import AnnotationBbox, OffsetImage
-
     mnist_y = model.y[::10].detach().numpy().reshape((-1, 28, 28))
     mnist_x = data_latent[::10]
     fig4, axs4 = plt.subplots(1, 1, figsize=(5, 5))
