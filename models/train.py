@@ -25,7 +25,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     # initialisation
     parser.add_argument("--data", default="concentric_circles", type=str)  # train for concentric_circles
-    parser.add_argument("--sweep", default=True, type=bool)
+    parser.add_argument("--sweep", default=False, type=bool)
     parser.add_argument("--exp_folder", default="models/", type=str)
     parser.add_argument("--train_pyro", default=False, type=bool)
     opts = parser.parse_args()

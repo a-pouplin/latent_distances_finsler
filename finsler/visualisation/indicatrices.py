@@ -33,27 +33,27 @@ def PolyArea(vertices):
 
 def contour_high_dim(finslers, riemanns, dims, out_dir, name, title=None, legend=True):
     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
-    norm = plt.Normalize()
     colormap = sns.color_palette("husl", len(dims))
-    csf = []
-    csr = []
+    csf_legend_elements = []
+    csr_legend_elements = []
+
     for idx, dim in enumerate(dims):
         axs.contour(finslers[idx], (1,), cmap="plasma", linewidths=1, alpha=0.5)
         axs.contour(riemanns[idx], (1,), cmap="plasma", linewidths=1, alpha=0.5, linestyles=[(0, (1, 5))])
-        csf.append(axs.contour(finslers[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5))
-        csr.append(
-            axs.contour(riemanns[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5, linestyles=[(0, (1, 5))])
-        )
-    csr = axs.contour(riemanns[idx], (1,), colors="k", linewidths=1, linestyles=[(0, (1, 5))])
+        csf = axs.contour(finslers[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5)
+        csr = axs.contour(riemanns[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5, linestyles=[(0, (1, 5))])
+
+        # Instead of storing the QuadContourSet objects, directly store the legend elements.
+        csf_legend_elements.append(csf.legend_elements()[0][0])
+        csr_legend_elements.append(csr.legend_elements()[0][0])
 
     if legend:
         labels = ["dim: {}".format(dim) for dim in dims]
         artists = []
-        for i, label in enumerate(labels):
-            artists.append(csf[i].legend_elements()[0][0])
-            artists.append(csr[i].legend_elements()[0][0])
-        # artists.append(csr.legend_elements()[0][0])
-        # labels.append("Riemann, dim: {}".format(dims[-1]))
+        for csf_element, csr_element in zip(csf_legend_elements, csr_legend_elements):
+            artists.append(csf_element)
+            artists.append(csr_element)
+
         axs.legend(
             handles=artists,
             labels=labels,
@@ -69,6 +69,46 @@ def contour_high_dim(finslers, riemanns, dims, out_dir, name, title=None, legend
     axs.set_title(title)
     axs.set(frame_on=False)
     fig.savefig(os.path.join(out_dir, "{}.svg".format(name)), dpi=fig.dpi, bbox_inches="tight")
+
+
+# def contour_high_dim(finslers, riemanns, dims, out_dir, name, title=None, legend=True):
+#     fig, axs = plt.subplots(1, 1, sharex=True, sharey=True)
+#     norm = plt.Normalize()
+#     colormap = sns.color_palette("husl", len(dims))
+#     csf = []
+#     csr = []
+#     for idx, dim in enumerate(dims):
+#         axs.contour(finslers[idx], (1,), cmap="plasma", linewidths=1, alpha=0.5)
+#         axs.contour(riemanns[idx], (1,), cmap="plasma", linewidths=1, alpha=0.5, linestyles=[(0, (1, 5))])
+#         csf.append(axs.contour(finslers[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5))
+#         csr.append(
+#             axs.contour(riemanns[idx], (1,), color=colormap[idx], linewidths=1, alpha=0.5, linestyles=[(0, (1, 5))])
+#         )
+#     csr = axs.contour(riemanns[idx], (1,), colors="k", linewidths=1, linestyles=[(0, (1, 5))])
+
+#     if legend:
+#         labels = ["dim: {}".format(dim) for dim in dims]
+#         artists = []
+#         for i, label in enumerate(labels):
+#             artists.append(csf[i].legend_elements()[0][0])
+#             artists.append(csr[i].legend_elements()[0][0])
+#         # artists.append(csr.legend_elements()[0][0])
+#         # labels.append("Riemann, dim: {}".format(dims[-1]))
+#         axs.legend(
+#             handles=artists,
+#             labels=labels,
+#             prop={"size": 6},
+#             loc="lower center",
+#             ncol=len(labels),
+#             bbox_to_anchor=(0.5, -0.05),
+#         )
+
+#     axs.set_xticks([])
+#     axs.set_yticks([])
+#     axs.set_aspect("equal")
+#     axs.set_title(title)
+#     axs.set(frame_on=False)
+#     fig.savefig(os.path.join(out_dir, "{}.svg".format(name)), dpi=fig.dpi, bbox_inches="tight")
 
 
 def contour_bounds(finsler, riemann, lower, out_dir, name, title=None, legend=False):

@@ -50,7 +50,7 @@ figure5:
 
 ## Make figure6
 figure6:
-	$(PYTHON_INTERPRETER) examples/fontdata.py
+## $(PYTHON_INTERPRETER) examples/fontdata.py
 	$(PYTHON_INTERPRETER) examples/qPCR.py
 
 ## Make figure7

@@ -11,10 +11,9 @@ import seaborn as sns
 import torch
 from stochman.curves import CubicSpline
 from stochman.discretized_manifold import DiscretizedManifold
-from stochman.geodesic import geodesic_minimizing_energy
 
 from finsler.gplvm import Gplvm
-from finsler.utils.data import make_sphere_surface, on_sphere
+from finsler.utils.data import make_sphere_surface
 from finsler.utils.helper import create_filepath, create_folder, pickle_load
 from finsler.visualisation.latent import volume_heatmap
 

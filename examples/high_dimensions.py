@@ -12,8 +12,8 @@ from finsler.visualisation.indicatrices import contour_high_dim, contour_test
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--outDir", default="plots/high_dimensions/", type=str)
-    parser.add_argument("--q", default=2, type=int)
-    parser.add_argument("--num_samples", default=100, type=int)  # used for 'resolution'
+    parser.add_argument("--q", default=2, type=int)  # latent dimension
+    parser.add_argument("--num_samples", default=30, type=int)  # used for 'resolution'
     opts = parser.parse_args()
     return opts
 
@@ -108,16 +108,15 @@ if __name__ == "__main__":
     rel_diff_volumes = np.empty((len(seeds), len(dims)))
 
     for ids, opts.seed in enumerate(seeds):
+        print(f"Image {ids} of {len(seeds)}")
         np.random.seed(opts.seed)
         # simulate central gaussian and central wishart
         scale = np.random.uniform(low=0.0, high=10, size=1)
         loc = np.sqrt(scale)
-        print("loc {}, scale {}".format(loc, scale))
         ncgauss = np.random.normal(loc, scale, size)
 
         for idd, dim in enumerate(dims):
             ncgauss_tronc = ncgauss[:, :dim, :]
-            print("dimension: {}".format(ncgauss_tronc.shape))
             ncwihsart = np.einsum("ijk,mjk->imk", ncgauss_tronc, ncgauss_tronc)
 
             tensor = Tensor()

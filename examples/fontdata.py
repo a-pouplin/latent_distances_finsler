@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     # Energy function computed with riemannian metric
     optimizer = torch.optim.LBFGS
-    eval_grid = 10
+    eval_grid = 16
     dim_latent, dim_obs = X.shape[1], Y.shape[1]
     c_coords_riemann, c_obs_riemann = torch.empty((opts.num_geod, eval_grid, dim_latent)), np.empty(
         (opts.num_geod, eval_grid, dim_obs)

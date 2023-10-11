@@ -19,7 +19,7 @@ def get_args():
     parser.add_argument("--train", action="store_false")
     parser.add_argument("--model_folder", default="models/starfish/", type=str)
     parser.add_argument("--exp_folder", default="plots/latent_heatmaps/", type=str)
-    parser.add_argument("--model_title", default="model", type=str)  # number of the experiment to use for plotting
+    parser.add_argument("--model_title", default="model_2", type=str)  # number of the experiment to use for plotting
     opts = parser.parse_args()
     return opts
 
@@ -39,7 +39,6 @@ if __name__ == "__main__":
     X = model.X.data.numpy()
     lengthscale = model.kernel.lengthscale_unconstrained.data
     variance = model.kernel.variance_unconstrained.data
-    print("Y shape: {} -- variance: {:.2f}, lengthscale: {:.2f}".format(Y.shape, variance, lengthscale))
 
     # get Riemannian and Finslerian metric
     gplvm_riemann = Gplvm(model, mode="riemannian")
@@ -47,7 +46,7 @@ if __name__ == "__main__":
 
     # plot latent space with indicatrices
     list_modes = ["variance", "vol_riemann", "vol_finsler", "diff"]
-    n_grid = 32
+    n_grid = 8
     for mode in list_modes:
         print("computing heatmaps... {}".format(mode))
         fig = plt.figure(0)
