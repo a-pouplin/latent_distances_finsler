@@ -4,15 +4,10 @@ import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import pyro
 import pyro.contrib.gp as gp
-import pyro.distributions as dist
 import pyro.ops.stats as stats
 import torch
-from pyro.infer import SVI, TraceMeanField_ELBO
-from pyro.optim import Adam as AdamPyro
-from torch.nn import Parameter
 
 import wandb
 from finsler.gplvm import Gplvm
@@ -29,7 +24,7 @@ from finsler.utils.pyro import initialise_kernel
 def get_args():
     parser = argparse.ArgumentParser()
     # initialisation
-    parser.add_argument("--data", default="concentric_circles", type=str)  # train for starfish data
+    parser.add_argument("--data", default="concentric_circles", type=str)  # train for concentric_circles
     parser.add_argument("--sweep", default=True, type=bool)
     parser.add_argument("--exp_folder", default="models/", type=str)
     parser.add_argument("--train_pyro", default=False, type=bool)
@@ -181,20 +176,9 @@ if __name__ == "__main__":
             "parameters": sweep_dict,
         }
         pprint.pprint(sweep_config)
-        sweep_id = wandb.sweep(sweep=sweep_config, project="concentric_circles_3")
+        sweep_id = wandb.sweep(sweep=sweep_config, project="latent_finsler_distances")
         wandb.agent(sweep_id, function=model_pipeline, count=50)
     else:
-        # print("--- single run mode ---")
-        # # test params
-        # config_params = {
-        #     "lr": 1e-2,
-        #     "iter": 8000,
-        #     "kernel": "Matern32",
-        #     "lengthscale": 0.5,
-        #     "variance": 0.95,
-        #     "noise": 1e-4,
-        # }
-        # model_pipeline(config=config_params)
         print("--- single run mode ---")
         # best params
         config_params = {

@@ -45,7 +45,7 @@ figure4:
 
 ## Make figure5
 figure5:
-	$(PYTHON_INTERPRETER) examples/starfish2.py
+	$(PYTHON_INTERPRETER) examples/starfish.py
 	$(PYTHON_INTERPRETER) examples/concentric.py
 
 ## Make figure6
